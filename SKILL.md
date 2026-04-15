@@ -1,13 +1,13 @@
 ---
 name: skill-8d-mrc
-description: "Use when debugging recurring problems, doing post-mortem analysis, or when a fix didn't prevent recurrence. Triggers on: root cause analysis, 8D, post-mortem, why did this happen again, non-conformance, escape analysis, prevention action, corrective action review, MRC, managerial root cause. Enforces four-quadrant root cause analysis with independent audit scoring."
+description: "Use when debugging recurring problems, doing post-mortem analysis, or when a fix didn't prevent recurrence. Triggers on: root cause analysis, 8D, post-mortem, why did this happen again, non-conformance, escape analysis, prevention action, corrective action review, MRC, managerial root cause. Enforces four-quadrant root cause analysis with independent multi-round audit."
 ---
 
-# 8D MRC — Four-Quadrant Root Cause Analysis with Audit Loop
+# 8D MRC — Four-Quadrant Root Cause Analysis with Multi-Round Audit
 
-Rigorous 8D problem solving adapted from automotive quality (IATF 16949, VDA, Ford G8D). Forces analysis across four root cause quadrants with independent audit scoring at every step.
+Rigorous 8D problem solving adapted from automotive quality (IATF 16949, VDA, Ford G8D). Forces analysis across four root cause quadrants with independent multi-round audit at every step.
 
-**Core principle:** A problem reaching the user means TWO independent failures: something went wrong (occurrence) AND every checkpoint missed it (non-detection). Each failure has a technical cause (event) and a managerial cause (systemic condition). All four must be found, audited, and prevented separately.
+**Core principle:** A problem reaching the user means TWO independent failures: something went wrong (occurrence/non-conformance) AND every checkpoint missed it (non-detection/escape). Each failure has a technical cause (event) and a managerial cause (systemic condition). All four must be found, audited to exhaustion, and prevented separately.
 
 **Reference study notes:** `D:/D-artifacts/studies/automotive-8d-mrc/automotive-8d-mrc_study.md`
 
@@ -29,43 +29,81 @@ Rigorous 8D problem solving adapted from automotive quality (IATF 16949, VDA, Fo
 
 ---
 
+## CRITICAL: 8D Output = Report Only
+
+**The 8D skill produces a REPORT. It does NOT execute any code changes, commits, or fixes.**
+
+After Phase 7 completes, the report is written to a file and presented to the user. The user reviews and approves before any implementation begins. Implementation uses `superpowers:executing-plans`, not this skill.
+
+**Gate:** If you find yourself editing source code during 8D analysis → STOP. You are violating the skill boundary.
+
+---
+
 ## The Four Quadrants
 
 ```
-              │ Occurrence            │ Non-Detection
-              │ (WHY it happened)     │ (WHY it wasn't caught)
+              │ Non-Conformance (NC)  │ Non-Detection (ND)
+              │ WHY it happened       │ WHY it wasn't caught
 ──────────────┼───────────────────────┼────────────────────────
-Technical RC  │ Q1: Direct technical  │ Q2: Detection method
-(event)       │ cause of the defect   │ that failed to catch it
+Technical RC  │ Q1 (TRC-NC):          │ Q2 (TRC-ND):
+(event)       │ Direct technical      │ Detection method
+              │ cause of the defect   │ that failed to catch it
 ──────────────┼───────────────────────┼────────────────────────
-Managerial RC │ Q3: Process/system    │ Q4: Control system
-(condition)   │ gap that allowed Q1   │ gap that allowed Q2
+Managerial RC │ Q3 (MRC-NC):          │ Q4 (MRC-ND):
+(condition)   │ Process/system gap    │ Control system gap
+              │ that allowed Q1       │ that allowed Q2
 ```
 
-**Q1 → Corrective Action** (fix this instance)
-**Q2 → Corrective Action** (fix this detection gap)
-**Q3 → Prevention Action** (prevent the CLASS of occurrence)
-**Q4 → Prevention Action** (prevent the CLASS of detection gaps)
+**Q1 (TRC-NC) → Corrective Action** (fix this instance)
+**Q2 (TRC-ND) → Corrective Action** (fix this detection gap)
+**Q3 (MRC-NC) → Prevention Action** (prevent the CLASS of occurrence)
+**Q4 (MRC-ND) → Prevention Action** (prevent the CLASS of detection gaps)
+
+### MRC Level Check (MANDATORY)
+
+If a root cause labeled "Managerial" involves a code change, function deletion, or technical fix → it is NOT managerial. It is technical. Relabel it as TRC and dig deeper for the true MRC.
+
+**MRC must be at management system level**: process definition, governance, organizational structure, policy, review gate, training curriculum design, tooling investment decision. NOT: "delete this function" or "add this check."
+
+### ND Equal Depth Rule
+
+Non-Detection (Q2, Q4) must receive the SAME depth of analysis as Non-Conformance (Q1, Q3). The audit agent explicitly checks: "Is the ND analysis as deep as the NC analysis?" If not → reject.
 
 ---
 
 ## Orchestration (7 Phases)
 
 ```
+Phase 0: Pre-Analysis (wiki + memory + references)
+    ↓
 Phase 1: IS/IS NOT Problem Definition
     ↓
-Phase 2: Four-Quadrant Root Cause Analysis (5-Why each)
+Phase 2: Four-Quadrant Why Analysis (10 Whys each, 4 quadrants)
     ↓
-Phase 3: Root Cause Audit (independent agent scores each quadrant)
+Phase 3: Root Cause Audit (3 challenge rounds + scoring rounds, max 7 total)
     ↓  ← loops back to Phase 2 if rejected
 Phase 4: Prevention Action Design (one per quadrant)
     ↓
-Phase 5: Prevention Action Audit ("Corrective or Preventive?" gate)
+Phase 5: Prevention Action Audit (3 challenge rounds + scoring rounds)
     ↓  ← loops back to Phase 4 if rejected
 Phase 6: Verification Plan
     ↓
-Phase 7: 8D Report Output
+Phase 7: 8D Report Output → FILE ONLY → await user review
 ```
+
+---
+
+## Phase 0: Pre-Analysis (MANDATORY — before any Why analysis)
+
+Before starting Phase 2, you MUST:
+
+1. **Read wiki index** (`D:/D-claude/personal-wiki/wiki/index.md`) — list ALL pages that might be relevant
+2. **Read project memory** (`~/.claude/projects/*/memory/MEMORY.md`) — list ALL entries that relate to this problem
+3. **Read relevant wiki pages** — for each relevant index entry, read the page and extract applicable anti-patterns/lessons
+4. **Check available skills** — is there a skill that addresses this type of problem?
+5. **Document what you found** — in the 8D report, list all consulted sources with what you learned from each
+
+If wiki or memory contains knowledge directly about this problem (e.g., "don't stack workarounds", "check if self-healing code is called") → this knowledge MUST appear in the Why analysis. Ignoring known knowledge = audit rejection.
 
 ---
 
@@ -73,166 +111,194 @@ Phase 7: 8D Report Output
 
 Before asking "Why?", define WHAT the problem is and ISN'T.
 
-| Dimension | IS (where problem appears) | IS NOT (where problem doesn't appear) | DISTINCTION |
-|-----------|---------------------------|---------------------------------------|-------------|
-| **WHAT** | What artifact/component has the defect? | What similar artifacts DON'T have it? | What's different? |
-| **WHERE** | Which module/file/system? | Which similar modules DON'T? | What's different? |
-| **WHEN** | When did it first appear? Which commit/build? | When was it last known-good? | What changed between? |
-| **EXTENT** | How severe? How frequent? Deterministic? | What conditions does it NOT appear under? | What varies? |
+| Dimension | IS | IS NOT | DISTINCTION |
+|-----------|-----|--------|-------------|
+| **WHAT** | | | |
+| **WHERE** | | | |
+| **WHEN** | | | |
+| **EXTENT** | | | |
 
 The DISTINCTION column is the diagnostic tool. Root cause hypotheses MUST explain ALL distinctions.
 
 ---
 
-## Phase 2: Four-Quadrant 5-Why Analysis
+## Phase 2: Four-Quadrant Why Analysis
 
-For EACH quadrant, ask WHY iteratively until reaching a **first-principles stopping point**.
+For EACH of the 4 quadrants, ask WHY iteratively.
+
+### Depth Requirement: Minimum 10 Whys
+
+- Ask at least 10 Whys per quadrant
+- Each Why MUST be a genuinely new insight, not a rephrasing of the previous one
+- Stop ONLY when: "Further why enters tautology, law of physics, or organizational boundary that cannot be changed"
+- The ANALYST proposes stopping. The AUDITOR decides if stopping is justified.
+- If auditor says "go deeper" → analyst must continue
+
+### What counts as a valid Why
+
+- ✅ New causal insight: reveals a mechanism, condition, or decision not previously stated
+- ❌ Rephrasing: same idea in different words
+- ❌ Jumping: skipping intermediate causes
+- ❌ Circular: "Why A? Because B. Why B? Because A."
 
 ### First-Principles Stopping Criterion
 
-Stop asking WHY when ALL FOUR tests pass:
+A Why chain stops when ALL FOUR tests pass:
 
-1. **Condition test**: Describes an ongoing state, not a one-time event
-2. **On/Off test**: Introducing the condition reproduces the defect; removing it suppresses it
-3. **Class test**: Explains the entire class of similar defects, not just this instance
-4. **Controllability test**: The organization can directly act on it
-
-If any test fails, go deeper.
+1. **Condition test**: Describes ongoing state, not one-time event
+2. **On/Off test**: Introducing condition reproduces defect; removing suppresses it
+3. **Class test**: Explains the entire class, not just this instance
+4. **Controllability test**: Organization can directly act on it
 
 ### What is NOT a root cause
 
-| Sounds like root cause | Why it's not | What to ask instead |
-|------------------------|--------------|---------------------|
-| "The code had a bug" | Symptom, not cause | WHY was this code possible to write? |
-| "Developer made a mistake" | Event, not condition | WHY did the process allow this mistake? |
-| "I didn't check" | Human action, not systemic | WHY was there no mandatory check? |
-| "Human error" | Tautology (humans always err) | WHY didn't the system prevent/catch this error? |
-| "Insufficient testing" | Vague | WHICH specific test was missing? WHY wasn't it required? |
+| Sounds like root cause | Why it's not | Ask instead |
+|------------------------|--------------|-------------|
+| "The code had a bug" | Symptom | WHY was this code possible to write? |
+| "Developer made a mistake" | Event | WHY did the process allow this mistake? |
+| "I didn't check" | Human action | WHY was there no mandatory check? |
+| "Human error" | Tautology | WHY didn't the system prevent/catch? |
+| "Insufficient testing" | Vague | WHICH test missing? WHY wasn't it required? |
 
-### Output per Quadrant
+### For each Why, analyst must consider:
 
-```markdown
-## Q[N]: [Technical/Managerial] × [Occurrence/Non-Detection]
-
-Why-1: [statement] → because [explanation]
-Why-2: [statement] → because [explanation]
-Why-3: [statement] → because [explanation]
-...
-Why-N: [FIRST-PRINCIPLES ROOT CAUSE]
-
-First-Principles Test:
-- Condition: [pass/fail + evidence]
-- On/Off: [pass/fail + evidence]
-- Class: [pass/fail + evidence]
-- Controllability: [pass/fail + evidence]
-```
+- Is there a wiki page about this pattern?
+- Is there a project memory entry about this?
+- Should I search online for how others solve this?
+- Is there a skill that addresses this?
+- Is this truly the BEST explanation, or am I taking the easy path?
 
 ---
 
 ## Phase 3: Root Cause Audit
 
-**Launch an independent audit agent** (separate subagent with fresh context) to score each quadrant.
+**Launch an independent audit agent** (subagent). Read `agents/rc_audit_agent.md` for full definition.
 
-### Audit Agent Instructions
+### Three-Phase Audit Process
 
-Read `agents/rc_audit_agent.md` for full agent definition.
+**Rounds 1-3: Challenge & Deepen (NO scoring)**
 
-The audit agent scores each quadrant on 5 dimensions (0-3 scale):
+Each round, the auditor reviews ALL four quadrants and for EACH Why step:
+1. Is this logic valid? Is it a real WHY or a restatement?
+2. Is this the best explanation? What alternatives were considered?
+3. Did you search wiki for this? Project memory? Online?
+4. Is there a skill that addresses this pattern?
+5. Can you go one more Why deeper?
+6. Is there a completely different framing of this problem?
+7. Is the ND analysis as deep as the NC analysis?
 
-| Dimension | 0 (Reject) | 1 (Weak) | 2 (Adequate) | 3 (Excellent) |
-|-----------|-----------|----------|---------------|---------------|
-| **Specificity** | Vague ("bad process") | Named but generic | Specific process + owner identified | Specific clause/step/gate with evidence |
-| **Depth** | Stopped at symptom | Proximate cause | Systemic condition | Organizational design principle |
-| **Verifiability** | No evidence possible | Plausible argument only | One verification method | Reproduction + suppression + IS/IS NOT consistency |
-| **Controllability** | "Human nature" | Individual behavior | Team/process level | Organizational/architectural level |
-| **Completeness** | Missing quadrants | Partial coverage | All four quadrants addressed | All four verified with cross-quadrant consistency |
+After each round, analyst must respond to ALL challenges before next round.
 
-**Reject threshold:** ANY dimension = 0, OR more than ONE dimension = 1 → REJECT.
+**Rounds 4-7: Scoring (only after 3 challenge rounds)**
 
-On rejection, the audit agent provides:
-- Which dimension(s) failed
-- Specific "go deeper" challenge: "You stopped at [X]. Ask WHY [X] is possible. What process/system allows [X] to exist?"
-- The analyst must re-do the 5-Why for that quadrant and resubmit
+Score 7 dimensions × 0-3:
+1. Specificity
+2. Depth
+3. Verifiability
+4. Controllability
+5. Completeness
+6. MRC Level Check (is MRC truly management-system level?)
+7. Wiki/Memory Consultation (were known resources consulted and cited?)
 
-**Loop continues until ALL four quadrants pass ALL five dimensions ≥ 2.**
+**Reject threshold**: ANY dimension = 0, OR more than ONE dimension = 1 → REJECT.
+
+**Maximum 7 total rounds** (3 challenge + 4 scoring attempts). If still not passing after 7 → escalate to user with current state.
 
 ---
 
 ## Phase 4: Prevention Action Design
 
-For each quadrant, propose an action. Q1/Q2 get corrective actions. Q3/Q4 get prevention actions.
-
-### "Corrective or Preventive?" Gate Test
-
-Every proposed action must pass THREE tests to be classified as prevention:
-
-| Test | Question | Corrective (fail) | Preventive (pass) |
-|------|----------|--------------------|--------------------|
-| **Scope** | Does it prevent only THIS instance or the CLASS? | "Fixed this bug" | "Changed process so this bug class can't be created" |
-| **Persistence** | Does it work without individual effort/memory? | "Retrained the developer" | "Static analysis rule blocks the pattern" |
-| **Measurability** | Can a third-party auditor verify it's working in 6 months? | "Team is more careful now" | "CI dashboard shows 0 violations of the new rule" |
-
-If ANY test fails → it's corrective, not preventive. Relabel and try again for Q3/Q4.
+For each quadrant, propose an action.
+- Q1/Q2 → Corrective Actions
+- Q3/Q4 → Prevention Actions
 
 ### Prevention Action Hierarchy (strongest to weakest)
 
-1. **Eliminate**: Architecture makes the error impossible (Rust ownership, HAL enforcement)
-2. **Detect at creation**: Tooling catches it at write-time (static analysis, linter rule)
-3. **Detect before merge**: Process gate catches it (mandatory review checklist, CI check)
-4. **Detect after merge**: Monitoring catches it (regression test, canary deployment)
-5. **Mitigate impact**: Limit damage (graceful degradation, rollback mechanism)
+1. **Eliminate**: Architecture makes error impossible
+2. **Detect at creation**: Tooling catches at write-time
+3. **Detect before merge**: Process gate catches it
+4. **Detect after merge**: Monitoring catches it
+5. **Mitigate impact**: Limit damage
 
-Q3/Q4 prevention actions should aim for levels 1-3. Levels 4-5 are detection improvements, not prevention.
+Q3/Q4 should aim for levels 1-3.
+
+### "Corrective or Preventive?" Gate
+
+| Test | Corrective (fail) | Preventive (pass) |
+|------|--------------------|--------------------|
+| **Scope** | Prevents THIS instance | Prevents the CLASS |
+| **Persistence** | Needs individual effort | Embedded in process/tooling |
+| **Measurability** | "Team is more careful" | Auditor can verify in 6 months |
+
+ALL THREE must pass for Q3/Q4 actions.
 
 ---
 
 ## Phase 5: Prevention Action Audit
 
-**Launch the same audit agent** to review each prevention action.
+Same three-phase audit as Phase 3:
 
-The audit agent asks for each Q3/Q4 action:
-1. Does it pass the Scope test? (class, not instance)
-2. Does it pass the Persistence test? (systemic, not individual)
-3. Does it pass the Measurability test? (auditable evidence)
-4. Is it at hierarchy level 1-3? (eliminate/detect-at-creation/detect-before-merge)
+**Rounds 1-3: Challenge (no scoring)**
+- Round 1: "Is this corrective or preventive?" — analyst must justify
+- Round 2: "Is this the BEST prevention? What alternatives exist? Search online?"
+- Round 3: "Side effects? Conflicts with existing mechanisms? Does wiki mention pitfalls?"
 
-**Reject if any test fails.** Provide specific feedback on what to change.
-
-Common rejections:
-- "Add a test" → corrective (detection improvement), not prevention. Ask: WHY wasn't this test required? Fix THAT.
-- "Improve training" → fails persistence + measurability. Ask: what PROCESS CHANGE makes training unnecessary?
-- "Be more careful" → fails all three tests. Not an action.
-- "Code review" → only preventive if it's a NEW mandatory gate that didn't exist before, with a specific checklist item for this failure mode.
+**Rounds 4-7: Score on Scope/Persistence/Measurability**
 
 ---
 
 ## Phase 6: Verification Plan
 
-For each prevention action, define:
+For each prevention action:
 
 | Element | Description |
 |---------|-------------|
-| **Metric** | What specific measurement proves it's working? (e.g., "0 violations of static analysis rule X in 6 months") |
-| **Data source** | Where does the measurement come from? (CI dashboard, audit log, defect database) |
-| **Timeframe** | Minimum 6 months of monitoring post-implementation |
-| **Success criteria** | Specific threshold (e.g., "0 recurrences of this defect class across all similar modules") |
-| **Failure action** | What happens if the metric shows the prevention isn't working? |
+| **Metric** | What measurement proves it's working? |
+| **Data source** | Where does measurement come from? |
+| **Timeframe** | Minimum 6 months |
+| **Success criteria** | Specific threshold |
+| **Failure action** | What if metric shows it's not working? |
 
 ---
 
 ## Phase 7: 8D Report Output
 
-Use `templates/8d_report_template.md` for the final report format.
+### Mandatory Summary Table (TOP of report)
 
-The report must include:
-- D1: Team composition
-- D2: IS/IS NOT problem definition
-- D3: Containment actions (what was done immediately)
-- D4: Four-quadrant root cause analysis (all 4 quadrants with 5-Why chains)
-- D5: Corrective actions (Q1, Q2) with verification evidence
-- D6: Prevention actions (Q3, Q4) with gate test results
-- D7: Verification plan with metrics
-- D8: Lessons learned + horizontal deployment plan
+```
+| | Non-Conformance (NC) | Non-Detection (ND) |
+|---|---|---|
+| **TRC** | Q1: [one-line summary] | Q2: [one-line summary] |
+| **MRC** | Q3: [one-line summary] | Q4: [one-line summary] |
+```
+
+This table MUST be filled. Any empty cell = report is incomplete.
+
+### Report File
+
+Write to: `docs/8d-reports/8d-YYYY-MM-DD-[problem-slug].md`
+
+Use `templates/8d_report_template.md` for structure.
+
+### Closure Audit
+
+Before declaring 8D complete, audit agent checks:
+1. Is the four-quadrant summary table complete? All 4 cells filled?
+2. Are all ND quadrants as deep as NC quadrants?
+3. Are all MRC root causes at management-system level (not code level)?
+4. Are all Q3/Q4 actions truly preventive (pass gate test)?
+5. Is there new knowledge to ingest into wiki?
+6. Is there new feedback to save to project memory?
+7. Were wiki and project memory consulted in Phase 0?
+
+### ⚠️ STOP HERE
+
+**Do NOT implement any changes. Present the report to the user for review.**
+
+The user will:
+1. Review the report
+2. Approve, reject, or request changes
+3. If approved → use `superpowers:executing-plans` to implement
 
 ---
 
@@ -240,14 +306,14 @@ The report must include:
 
 | # | Agent | Role | Phase |
 |---|-------|------|-------|
-| 1 | Orchestrator (you) | Drive the analysis, ask WHYs, propose actions | All |
-| 2 | `rc_audit_agent` | Independent scoring of root causes (5 dimensions, 0-3) | Phase 3, 5 |
+| 1 | Orchestrator (you) | Drive analysis, ask Whys, propose actions | All |
+| 2 | `rc_audit_agent` | Independent multi-round challenge + scoring | Phase 3, 5, 7 |
 
-### Sub-Agent Prompt Compliance
+### Sub-Agent Compliance
 
-When launching the audit agent, you MUST:
+When launching audit agent:
 1. Read `agents/rc_audit_agent.md` first
-2. Include full file contents verbatim at top of subagent prompt
+2. Include full contents verbatim at top of subagent prompt
 3. Provide the four-quadrant analysis as task context
 4. Do NOT summarize the agent definition
 
@@ -255,17 +321,20 @@ When launching the audit agent, you MUST:
 
 ## Common 8D Failures (Anti-Patterns)
 
-| Failure | Why it happens | How this skill prevents it |
-|---------|---------------|---------------------------|
-| Only Q1 addressed | "Fix the bug and move on" | Audit agent rejects if any quadrant missing |
-| Non-detection ignored | "We found it, that's what matters" | Q2/Q4 are mandatory; audit scores non-detection coverage |
-| Prevention = corrective | "We added a test" (that's Q2, not Q4) | "Corrective or Preventive?" gate test |
-| Root cause too shallow | "Developer made a mistake" | First-principles stopping criterion + audit depth scoring |
-| No verification plan | "It's obviously fixed" | Phase 6 is mandatory; audit checks measurability |
-| "Improve training" as prevention | Quick answer that avoids process change | Audit explicitly rejects; persistence + measurability tests fail |
+| Failure | How this skill prevents it |
+|---------|---------------------------|
+| Only Q1 addressed | Audit rejects if any quadrant missing |
+| ND ignored | ND Equal Depth Rule + audit checks |
+| MRC = code fix | MRC Level Check (must be management system) |
+| Prevention = corrective | Three-round challenge + gate test |
+| Root cause too shallow | 10-Why minimum + auditor decides when to stop |
+| Wiki knowledge ignored | Phase 0 mandatory + audit checks consultation |
+| 8D report → direct execution | Output = report only gate |
+| "Improve training" as prevention | Persistence + Measurability tests fail |
+| Why chain is rephrasing | Per-Why-step audit in challenge rounds |
 
 ---
 
 ## Output Language
 
-Match user's language. Technical terms (8D, MRC, IS/IS NOT, FMEA, Kepner-Tregoe) stay in English.
+Match user's language. Technical terms (8D, MRC, TRC, NC, ND, IS/IS NOT, FMEA) stay in English.
