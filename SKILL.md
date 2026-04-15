@@ -206,11 +206,11 @@ Score 7 dimensions × 0-3:
 
 ---
 
-## Phase 4: Prevention Action Design
+## Phase 4: Prevention Action Design — 10-Why Chain
 
-For each quadrant, propose an action.
-- Q1/Q2 → Corrective Actions
-- Q3/Q4 → Prevention Actions
+For each quadrant, propose an action:
+- Q1/Q2 → Corrective Actions (fix this instance/detection gap)
+- Q3/Q4 → Prevention Actions (prevent the CLASS)
 
 ### Prevention Action Hierarchy (strongest to weakest)
 
@@ -222,7 +222,56 @@ For each quadrant, propose an action.
 
 Q3/Q4 should aim for levels 1-3.
 
-### "Corrective or Preventive?" Gate
+### Prevention 10-Why Chain (MANDATORY for Q3/Q4)
+
+For each Q3/Q4 prevention action, ask WHY iteratively — **same depth as root cause analysis**.
+
+Direction is OPPOSITE to root cause: instead of "why did it happen?" → "why is this the BEST prevention?"
+
+```
+Why-1:  Why this action? → because it addresses [root cause]
+Why-2:  Is there a STRONGER action? → consider hierarchy: eliminate > detect > mitigate
+Why-3:  Why not eliminate entirely? → because [constraint] → can we remove the constraint?
+Why-4:  Does this prevent the CLASS or just this instance? → verify scope
+Why-5:  Will this work without individual effort? → verify persistence
+Why-6:  Can a third-party auditor verify this in 6 months? → verify measurability
+Why-7:  Does this conflict with existing mechanisms? → check wiki, memory, existing code
+Why-8:  What's the failure mode of this prevention? Can IT fail silently?
+Why-9:  Has this type of prevention been tried before? Did it work? → check history
+Why-10: Is this the most fundamental prevention possible within our control?
+```
+
+Each Why must be a genuinely new insight. The analyst proposes stopping; the auditor decides.
+
+### Deployment Scope Decision (MANDATORY for Q3/Q4)
+
+After the 10-Why chain, the analyst MUST determine: is this prevention **project-scoped** or **global-scoped**?
+
+| Scope | Meaning | Where it lives | Example |
+|-------|---------|----------------|---------|
+| **Project** | Prevents this class only within this project | Project CLAUDE.md, project hooks, project tests | "Add pre-commit hook to daily_brief" |
+| **Global** | Prevents this class across ALL projects | Global `~/.claude/CLAUDE.md`, global hooks, wiki | "All projects must have detection artifacts for bug fixes" |
+
+**Decision criteria:**
+1. Is the root cause specific to this project's architecture/domain? → Project
+2. Is the root cause a general development practice gap? → Global
+3. Could this same class of failure occur in other projects? → Global
+4. Does the prevention mechanism require project-specific knowledge? → Project
+5. Is the prevention a universal principle (e.g., "always test", "always consult knowledge base")? → Global
+
+**Both answers are valid.** The auditor challenges the choice:
+- If project-scoped: "Why not global? Could other projects benefit?"
+- If global-scoped: "Is this too broad? Will it create noise in projects where it doesn't apply?"
+
+**Output:**
+```
+Deployment Scope: [PROJECT / GLOBAL]
+Justification: [why this scope, not the other]
+If PROJECT: horizontal deployment candidates in D8
+If GLOBAL: which global config file gets the rule
+```
+
+### "Corrective or Preventive?" Gate (applied BEFORE the 10-Why)
 
 | Test | Corrective (fail) | Preventive (pass) |
 |------|--------------------|--------------------|
@@ -230,20 +279,71 @@ Q3/Q4 should aim for levels 1-3.
 | **Persistence** | Needs individual effort | Embedded in process/tooling |
 | **Measurability** | "Team is more careful" | Auditor can verify in 6 months |
 
-ALL THREE must pass for Q3/Q4 actions.
+ALL THREE must pass for Q3/Q4 actions. If any fails → it's corrective, not prevention. Relabel and redesign before starting the 10-Why chain.
+
+### Output per Prevention Action
+
+```markdown
+## Prevention Q[3/4]: [MRC-NC/MRC-ND]
+
+Proposed action: [description]
+
+Gate Test:
+- Scope: [PASS/FAIL — evidence]
+- Persistence: [PASS/FAIL — evidence]
+- Measurability: [PASS/FAIL — evidence]
+
+Prevention Why Chain:
+Why-1: [Why this action?] → [because...]
+Why-2: [Is there a stronger action?] → [because...]
+...
+Why-N: [This is the most fundamental prevention within our control]
+
+Prevention Hierarchy Level: [1-5]
+Failure Mode of Prevention: [how could this prevention itself fail?]
+Deployment Scope: [PROJECT / GLOBAL — justification]
+```
 
 ---
 
 ## Phase 5: Prevention Action Audit
 
-Same three-phase audit as Phase 3:
+**Launch a SEPARATE audit agent** — `prevention_audit_agent.md` (NOT the same as `rc_audit_agent`).
 
-**Rounds 1-3: Challenge (no scoring)**
-- Round 1: "Is this corrective or preventive?" — analyst must justify
-- Round 2: "Is this the BEST prevention? What alternatives exist? Search online?"
-- Round 3: "Side effects? Conflicts with existing mechanisms? Does wiki mention pitfalls?"
+Why separate: RC auditor who approved the root cause has confirmation bias toward prevention that matches. Prevention auditor sees it with fresh eyes.
 
-**Rounds 4-7: Score on Scope/Persistence/Measurability**
+### Three-Phase Audit Process (same structure as Phase 3)
+
+**Rounds 1-3: Challenge & Deepen (NO scoring)**
+
+Each round, for each Q3/Q4 prevention, the auditor reviews EVERY prevention-why step:
+1. Is the logic valid? Is this a real improvement or a restatement?
+2. Is this truly prevention or corrective in disguise?
+3. Is there a STRONGER prevention? Search wiki, online, skills
+4. Does this conflict with existing mechanisms?
+5. Has this been tried before? Did it work?
+6. What's the failure mode? Can THIS prevention fail silently?
+7. MRC Level Check: management-system level? Or code change disguised as management?
+
+After each round, analyst must respond to ALL challenges.
+
+**Rounds 4-7: Scoring (only after 3 challenge rounds)**
+
+Score 7 dimensions × 0-3:
+
+| # | Dimension | 0 (Reject) | 1 (Weak) | 2 (Adequate) | 3 (Excellent) |
+|---|-----------|-----------|----------|---------------|---------------|
+| 1 | **Specificity** | Vague ("improve process") | Named but generic | Specific action + owner + timeline | Concrete deliverable with acceptance criteria |
+| 2 | **Strength** | Level 5 (mitigate only) | Level 4 (detect after) | Level 2-3 (detect at creation/before merge) | Level 1 (eliminate — architecturally impossible) |
+| 3 | **Scope** | Instance only | Partial class | Full class in this project | Class across similar projects/processes |
+| 4 | **Persistence** | Requires individual memory | Requires team discipline | Embedded in process/tooling | Architecturally enforced (cannot be bypassed) |
+| 5 | **Measurability** | "We'll be more careful" | Qualitative assessment only | Specific metric defined | Metric + data source + success threshold + failure action |
+| 6 | **MRC Level** | Code change disguised as management | Process but vague | Specific process + owner | Organizational design principle |
+| 7 | **Conflict Check** | Creates new problems | Minor side effects | No conflicts identified | Actively synergizes with existing mechanisms |
+
+**Reject threshold**: ANY dimension = 0, OR more than ONE dimension = 1 → REJECT.
+
+**Maximum 7 total rounds.** If still failing → escalate to user.
 
 ---
 
@@ -280,6 +380,25 @@ Write to: `docs/8d-reports/8d-YYYY-MM-DD-[problem-slug].md`
 
 Use `templates/8d_report_template.md` for structure.
 
+### Wiki Ingest Section (MANDATORY if recommended)
+
+If the closure audit recommends wiki ingest, the report MUST include **draft content** for each topic — not just a title. The draft content should be ready to save to `personal-wiki/raw/notes/` for ingest.
+
+```markdown
+### Wiki Ingest: [Topic Title]
+
+**Target page**: [new page slug or existing page to update]
+**Type**: [concept / source / comparison]
+
+[Full draft content — 200-500 words with:]
+- What the pattern/concept is
+- When to apply it
+- Common mistakes / anti-patterns
+- Connection to existing wiki pages
+```
+
+**Why:** A topic title without content is a TODO that never gets done. The 8D analysis already produced the knowledge — extracting it into wiki format costs 5 minutes during report writing but saves hours of re-discovery later.
+
 ### Closure Audit
 
 Before declaring 8D complete, audit agent checks:
@@ -287,7 +406,7 @@ Before declaring 8D complete, audit agent checks:
 2. Are all ND quadrants as deep as NC quadrants?
 3. Are all MRC root causes at management-system level (not code level)?
 4. Are all Q3/Q4 actions truly preventive (pass gate test)?
-5. Is there new knowledge to ingest into wiki?
+5. Is there new knowledge to ingest into wiki? **If yes → draft content must be in report**
 6. Is there new feedback to save to project memory?
 7. Were wiki and project memory consulted in Phase 0?
 
@@ -307,15 +426,19 @@ The user will:
 | # | Agent | Role | Phase |
 |---|-------|------|-------|
 | 1 | Orchestrator (you) | Drive analysis, ask Whys, propose actions | All |
-| 2 | `rc_audit_agent` | Independent multi-round challenge + scoring | Phase 3, 5, 7 |
+| 2 | `rc_audit_agent` | Independent audit of root cause analysis | Phase 3 |
+| 3 | `prevention_audit_agent` | Independent audit of prevention actions (SEPARATE from RC auditor) | Phase 5, 7 |
+
+**Why two separate auditors:** The RC auditor who approved the root cause has confirmation bias toward prevention actions that match "their" root cause. The prevention auditor sees the prevention with fresh eyes and different expertise (systemic design vs causal logic).
 
 ### Sub-Agent Compliance
 
-When launching audit agent:
-1. Read `agents/rc_audit_agent.md` first
-2. Include full contents verbatim at top of subagent prompt
-3. Provide the four-quadrant analysis as task context
+When launching EITHER audit agent:
+1. Read the corresponding agent `.md` file first
+2. Include full file contents verbatim at top of subagent prompt
+3. Provide the analysis as task context
 4. Do NOT summarize the agent definition
+5. Do NOT reuse the same subagent for both RC and prevention audit
 
 ---
 
