@@ -97,39 +97,44 @@ For EACH Q3/Q4 prevention action, and for EACH prevention-why step:
 ### Overall: [PROCEED TO NEXT ROUND / ANALYST MUST REWORK]
 ```
 
-**Minimum 3 challenge rounds.** Continue if still weak (max 7 total).
+**Minimum 3 challenge rounds.** Continue challenging until exhausted — no round cap.
 
 ---
 
-## Phase B: Scoring Rounds (Rounds 4-7)
+## Phase B: Continuous Improvement (NO rubber-stamp scoring)
 
-Only begin scoring after 3 challenge rounds have pushed the prevention to maximum strength.
+After 3+ challenge rounds, do NOT score pass/fail. Instead:
 
-### 7 Scoring Dimensions (0-3 each)
+### 1. List ALL remaining weaknesses
+Every weakness, no matter how minor. Nothing is "good enough to pass."
 
-| # | Dimension | 0 (Reject) | 1 (Weak) | 2 (Adequate) | 3 (Excellent) |
-|---|-----------|-----------|----------|---------------|---------------|
-| 1 | **Specificity** | Vague ("improve process") | Named but generic | Specific action + owner + timeline | Concrete deliverable with acceptance criteria |
-| 2 | **Strength** | Level 5 (mitigate only) | Level 4 (detect after merge) | Level 2-3 (detect at creation/before merge) | Level 1 (eliminate — architecturally impossible) |
-| 3 | **Scope** | Instance only | Partial class coverage | Full class in this project | Class across similar projects + horizontal deployment |
-| 4 | **Persistence** | Requires individual memory | Requires team discipline | Embedded in process/tooling | Architecturally enforced (cannot be bypassed) |
-| 5 | **Measurability** | "We'll be more careful" | Qualitative only | Metric defined | Metric + data source + threshold + failure action |
-| 6 | **MRC Level** | Code change disguised as mgmt | Process but vague | Specific process + owner | Organizational design principle |
-| 7 | **Conflict Check** | Creates new problems | Minor side effects | No conflicts | Synergizes with existing mechanisms |
+### 2. Classify each weakness
+- **ADDRESSABLE**: Analyst can fix this now → analyst MUST fix → re-submit → continue challenging
+- **RESIDUAL**: Inherent limitation that cannot be removed → document in Residual Risk Register with mitigation or acceptance rationale
 
-### Reject Threshold
+### 3. Declare EXHAUSTED when
+- No more ADDRESSABLE weaknesses remain
+- All RESIDUAL risks are documented with mitigation/acceptance rationale
+- The auditor has no more challenges to raise
 
-- ANY dimension = 0 → **REJECT**
-- More than ONE dimension = 1 → **REJECT**
-- Maximum 7 total rounds. If still failing → escalate to user.
+### Output Format
 
-### On Rejection
+```markdown
+## Prevention Audit Result
 
-For each rejected dimension:
-1. Current score and specific reason
-2. What would make it stronger — concrete suggestion
-3. Which prevention-why step needs rework
-4. Whether the analyst should consider a completely different prevention approach
+### Addressed (fixed during audit rounds)
+- Round N: [weakness] → [how it was fixed]
+- ...
+
+### Residual Risks (inherent, accepted)
+- [weakness]: [why it can't be fixed] → [mitigation or acceptance rationale]
+
+### Verdict: EXHAUSTED / STILL HAS ADDRESSABLE WEAKNESSES
+```
+
+**Why no scoring:** Scoring creates false confidence. A "16/21 PASS" hides 5 points of weakness behind a passing threshold. The Residual Risk Register makes every weakness visible — nothing is hidden by a number.
+
+**Anti-pattern to catch:** If the analyst keeps deferring weaknesses to "residual" when they're actually addressable → challenge: "Is this TRULY unaddressable, or is the analyst avoiding the hard work?"
 
 ---
 

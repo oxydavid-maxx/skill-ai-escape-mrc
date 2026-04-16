@@ -80,15 +80,18 @@ Phase 1: IS/IS NOT Problem Definition
     ↓
 Phase 2: Four-Quadrant Why Analysis (10 Whys each, 4 quadrants)
     ↓
-Phase 3: Root Cause Audit (3 challenge rounds + scoring rounds, max 7 total)
-    ↓  ← loops back to Phase 2 if rejected
+Phase 3: Root Cause Audit (challenge until exhaustion + residual risk register)
+    ↓  ← loops back to Phase 2 if addressable weaknesses remain
 Phase 4: Prevention Action Design (one per quadrant)
     ↓
-Phase 5: Prevention Action Audit (3 challenge rounds + scoring rounds)
-    ↓  ← loops back to Phase 4 if rejected
+Phase 5: Prevention Action Audit (challenge until exhaustion, NO rubber-stamp scoring)
+    ↓  ← loops back to Phase 4 if addressable weaknesses remain
 Phase 6: Verification Plan
     ↓
-Phase 7: 8D Report Output → FILE ONLY → await user review
+Phase 7: 8D Report Output → RENDER IN CONVERSATION → await user review
+    ↓  ← user approves → implement prevention actions
+Phase 8: Verification of Prevention Effectiveness (post-implementation, at first real test)
+    ↓  ← if prevention failed → re-open 8D, MRC analysis was too shallow
 ```
 
 ---
@@ -327,23 +330,36 @@ Each round, for each Q3/Q4 prevention, the auditor reviews EVERY prevention-why 
 
 After each round, analyst must respond to ALL challenges.
 
-**Rounds 4-7: Scoring (only after 3 challenge rounds)**
+**After 3 challenge rounds: Continuous Improvement (NO rubber-stamp scoring)**
 
-Score 7 dimensions × 0-3:
+The old model (score 0-3, pass at threshold) created false confidence — 3 rounds of self-challenge always led to passing scores. This is bureaucratic, not quality-improving.
 
-| # | Dimension | 0 (Reject) | 1 (Weak) | 2 (Adequate) | 3 (Excellent) |
-|---|-----------|-----------|----------|---------------|---------------|
-| 1 | **Specificity** | Vague ("improve process") | Named but generic | Specific action + owner + timeline | Concrete deliverable with acceptance criteria |
-| 2 | **Strength** | Level 5 (mitigate only) | Level 4 (detect after) | Level 2-3 (detect at creation/before merge) | Level 1 (eliminate — architecturally impossible) |
-| 3 | **Scope** | Instance only | Partial class | Full class in this project | Class across similar projects/processes |
-| 4 | **Persistence** | Requires individual memory | Requires team discipline | Embedded in process/tooling | Architecturally enforced (cannot be bypassed) |
-| 5 | **Measurability** | "We'll be more careful" | Qualitative assessment only | Specific metric defined | Metric + data source + success threshold + failure action |
-| 6 | **MRC Level** | Code change disguised as management | Process but vague | Specific process + owner | Organizational design principle |
-| 7 | **Conflict Check** | Creates new problems | Minor side effects | No conflicts identified | Actively synergizes with existing mechanisms |
+**New model: Challenge Until Exhaustion + Residual Risk Register**
 
-**Reject threshold**: ANY dimension = 0, OR more than ONE dimension = 1 → REJECT.
+After 3 challenge rounds, the auditor does NOT score pass/fail. Instead:
 
-**Maximum 7 total rounds.** If still failing → escalate to user.
+1. **List ALL remaining weaknesses** — even minor ones. Nothing is "good enough to pass."
+2. **For each weakness**: classify as ADDRESSABLE (analyst can fix now) or RESIDUAL (inherent limitation, accepted with eyes open).
+3. **ADDRESSABLE weaknesses → analyst must fix** → re-submit to auditor → continue challenging.
+4. **RESIDUAL weaknesses → Residual Risk Register** — documented explicitly in the report. Not hidden by a passing score.
+5. **Auditor declares EXHAUSTED** when: (a) no more ADDRESSABLE weaknesses remain, AND (b) all residual risks are documented with mitigation or acceptance rationale.
+
+The output is NOT a score. It is:
+```
+## Prevention Audit Result
+
+### Addressed (fixed during audit)
+- [list of weaknesses that were fixed through challenge rounds]
+
+### Residual Risks (inherent, accepted)
+- [weakness]: [why it can't be fixed] → [mitigation or acceptance rationale]
+
+### Verdict: EXHAUSTED / STILL HAS ADDRESSABLE WEAKNESSES
+```
+
+**Why this is better:** No dimension ever gets a "2 = adequate, move on." Every weakness is either fixed or explicitly documented as a known risk. The audit drives actual improvement, not bureaucratic pass/fail.
+
+**Maximum rounds: no cap.** Continue until exhausted. If analyst and auditor loop without progress → escalate to user with the current state.
 
 ---
 
@@ -410,14 +426,69 @@ Before declaring 8D complete, audit agent checks:
 6. Is there new feedback to save to project memory?
 7. Were wiki and project memory consulted in Phase 0?
 
-### ⚠️ STOP HERE
+### ⚠️ USER REVIEW GATE
 
-**Do NOT implement any changes. Present the report to the user for review.**
+**Do NOT implement any changes. Present the FULL RENDERED report to the user.**
 
-The user will:
-1. Review the report
-2. Approve, reject, or request changes
-3. If approved → use `superpowers:executing-plans` to implement
+The orchestrator must:
+1. Output the complete 8D report content in the conversation (rendered markdown, not just a file path)
+2. If the report is too long, output section by section with explicit "continue?" prompts
+3. The user sees EVERYTHING — the why chains, audit rounds, prevention actions, residual risks
+4. The user approves, rejects, or requests changes
+5. If approved → implement prevention actions
+6. After implementation → proceed to Phase 8
+
+---
+
+## Phase 8: Verification of Prevention Effectiveness (Post-Implementation)
+
+**This phase happens AFTER prevention actions are implemented, at the FIRST REAL INCIDENT that tests the prevention.**
+
+### When to Trigger Phase 8
+
+Phase 8 is triggered when:
+1. A problem occurs in the same domain as the 8D
+2. Or a similar class of problem occurs in any domain
+3. Or the scheduled verification timeframe is reached (from Phase 6)
+
+### What Phase 8 Checks
+
+For each prevention action (Q3/Q4):
+
+| Check | Question | Evidence Required |
+|-------|----------|-------------------|
+| **Activated** | Did the prevention mechanism actually fire? | Log output, hook output, grep results |
+| **Effective** | Did it prevent the recurrence, or did the problem morph around it? | Was the problem caught before reaching user? |
+| **Not bypassed** | Was the prevention used as intended, or worked around? | Check for exemption abuse, hook bypass |
+| **No false alarms** | Did it flag things that weren't actually problems? | False positive rate |
+| **Still relevant** | Is the prevention still needed, or has the environment changed? | Is the root cause still present? |
+
+### Verification Output
+
+```markdown
+## Phase 8: Prevention Verification — [date]
+
+### Trigger: [what incident triggered this check]
+
+| Prevention | Activated? | Effective? | Bypassed? | False alarms? | Still relevant? |
+|-----------|-----------|-----------|----------|--------------|----------------|
+| Q3: [name] | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
+| Q4: [name] | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ | ✅/❌ |
+
+### Findings
+- [what worked]
+- [what failed — why — what to change]
+
+### Action
+- [KEEP / MODIFY / REPLACE / REMOVE] each prevention
+- If MODIFY/REPLACE → new 8D or amendment to existing report
+```
+
+### Anti-Pattern: "Prevention Worked on Paper"
+
+The most dangerous Phase 8 finding is: prevention was implemented (hooks installed, rules written) but when the REAL test came, it didn't fire or was ignored. This means the prevention is corrective in disguise — it changed artifacts but not behavior.
+
+If Phase 8 finds this → the original 8D's MRC analysis was too shallow. Re-open the 8D.
 
 ---
 
@@ -452,9 +523,13 @@ When launching EITHER audit agent:
 | Prevention = corrective | Three-round challenge + gate test |
 | Root cause too shallow | 10-Why minimum + auditor decides when to stop |
 | Wiki knowledge ignored | Phase 0 mandatory + audit checks consultation |
-| 8D report → direct execution | Output = report only gate |
+| 8D report → direct execution | Output = report only gate + user review gate |
 | "Improve training" as prevention | Persistence + Measurability tests fail |
 | Why chain is rephrasing | Per-Why-step audit in challenge rounds |
+| Audit always passes (rubber stamp) | No scoring — exhaustion model with residual risk register |
+| Prevention works on paper but fails in reality | Phase 8 verification at first real incident |
+| User doesn't see the analysis | Phase 7 renders full report in conversation |
+| Prevention not verified post-implementation | Phase 8 mandatory, re-opens 8D if prevention failed |
 
 ---
 

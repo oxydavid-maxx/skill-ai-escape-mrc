@@ -87,35 +87,40 @@ After each round, the analyst must respond to ALL challenges. The auditor reads 
 
 ---
 
-## Phase B: Scoring Rounds (Rounds 4-7, after challenge rounds pass)
+## Phase B: Continuous Improvement (NO rubber-stamp scoring)
 
-Only begin scoring when challenge rounds have pushed the analysis to sufficient depth.
+After 3+ challenge rounds, do NOT score pass/fail. Instead:
 
-### 7 Scoring Dimensions (0-3 each)
+### 1. List ALL remaining weaknesses
+Every weakness in every quadrant, no matter how minor. Nothing is "good enough to pass."
 
-| # | Dimension | 0 (Reject) | 1 (Weak) | 2 (Adequate) | 3 (Excellent) |
-|---|-----------|-----------|----------|---------------|---------------|
-| 1 | **Specificity** | Vague ("bad process") | Named but generic | Specific process + owner | Specific clause/step/gate + evidence |
-| 2 | **Depth** | Stopped at symptom | Proximate cause | Systemic condition | Organizational design principle |
-| 3 | **Verifiability** | No evidence possible | Plausible argument | One verification method | Reproduction + suppression + IS/IS NOT |
-| 4 | **Controllability** | "Human nature" | Individual behavior | Team/process level | Organizational/architectural |
-| 5 | **Completeness** | Missing quadrants | Partial (NC only) | All 4 quadrants | All 4 verified + cross-quadrant consistency |
-| 6 | **MRC Level** | MRC involves code change (=TRC) | MRC is process but vague | MRC is specific process + owner | MRC is organizational design principle |
-| 7 | **Wiki/Memory** | No consultation | Consulted but not cited | Cited with findings | Findings directly shaped the analysis |
+### 2. Classify each weakness
+- **ADDRESSABLE**: Analyst can fix this now → analyst MUST fix → re-submit → continue challenging
+- **RESIDUAL**: Inherent limitation (e.g., "can't verify because environment changed") → document in Residual Risk Register
 
-### Reject Threshold
+### 3. Declare EXHAUSTED when
+- No more ADDRESSABLE weaknesses remain
+- All RESIDUAL risks are documented with rationale
+- The auditor has no more challenges to raise
 
-- ANY dimension = 0 → **REJECT**
-- More than ONE dimension = 1 → **REJECT**
-- Maximum 7 total rounds (challenge + scoring). If still failing → escalate to user
+### Output Format
 
-### On Rejection (Scoring Round)
+```markdown
+## RC Audit Result
 
-For each rejected dimension:
-1. Current score and specific reason
-2. "Go deeper" challenge with concrete guidance
-3. Example of what a passing answer looks like at this depth
-4. Which specific Why step needs rework
+### Addressed (fixed during audit rounds)
+- Round N: [weakness in Q?] → [how it was fixed]
+- ...
+
+### Residual Risks (inherent, accepted)
+- [weakness]: [why it can't be fixed] → [acceptance rationale]
+
+### Verdict: EXHAUSTED / STILL HAS ADDRESSABLE WEAKNESSES
+```
+
+**Why no scoring:** A "19/21 PASS" hides weaknesses behind a passing threshold. The exhaustion model makes every weakness visible — either fixed or explicitly documented as a known risk.
+
+**No round cap.** Continue until exhausted. If analyst and auditor loop without progress → escalate to user with current state.
 
 ---
 
