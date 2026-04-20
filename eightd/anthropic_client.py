@@ -153,8 +153,7 @@ def _call_openrouter(model: str, system: str, user: str, max_tokens: int, temper
 
     import openai
     or_client = openai.OpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
-    # Translate model ID: claude-opus-4-6 -> anthropic/claude-opus-4
-    or_model = "anthropic/" + model.replace("claude-", "claude-")
+    or_model = _translate_model_for_openrouter(model)
     resp = or_client.chat.completions.create(
         model=or_model,
         max_tokens=max_tokens,
@@ -165,6 +164,27 @@ def _call_openrouter(model: str, system: str, user: str, max_tokens: int, temper
         ],
     )
     return resp.choices[0].message.content or ""
+
+
+def _translate_model_for_openrouter(model: str) -> str:
+    """Translate Anthropic model ID to OpenRouter format.
+
+    Examples:
+    - claude-opus-4-6 -> anthropic/claude-opus-4
+    - claude-sonnet-4-6 -> anthropic/claude-sonnet-4
+    - claude-haiku-4-5-20251001 -> anthropic/claude-3.5-haiku (fallback tier match)
+    """
+    m = model.lower()
+    # Strip -YYYYMMDD date suffix if present
+    m = re.sub(r"-\d{8}$", "", m)
+    # Extract tier
+    if "opus" in m:
+        return "anthropic/claude-opus-4"
+    if "sonnet" in m:
+        return "anthropic/claude-sonnet-4"
+    if "haiku" in m:
+        return "anthropic/claude-3.5-haiku"
+    return "anthropic/claude-sonnet-4"  # default
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30))
