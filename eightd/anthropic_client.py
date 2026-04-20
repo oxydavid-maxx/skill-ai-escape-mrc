@@ -63,15 +63,16 @@ USE_CLI = not _api_key and _CLAUDE_PATH is not None
 _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
-def _call_cli(prompt: str, timeout: int = 600) -> str:
+def _call_cli(prompt: str, timeout: int = 300) -> str:
     """Call Claude via CLI subprocess. Uses user's Claude Code subscription.
 
     MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env — otherwise
     claude CLI detects nested session and refuses (silent hang).
     See module docstring.
+
+    Logs stdout/stderr preview on empty output for debugging.
     """
-    # Strip CLAUDECODE from subprocess env to allow claude CLI to run
-    # inside another Claude Code session (docs: claude-agent-sdk-python#573)
+    import sys as _sys
     child_env = os.environ.copy()
     child_env.pop("CLAUDECODE", None)
     child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
@@ -94,12 +95,76 @@ def _call_cli(prompt: str, timeout: int = 600) -> str:
             )
         if result.returncode != 0:
             raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:500]}")
-        return result.stdout.strip()
+        out = result.stdout.strip()
+        if not out:
+            # Log diagnostic info on empty output
+            _sys.stderr.write(
+                f"[WARN] claude CLI returned empty stdout. "
+                f"rc={result.returncode} stderr_preview={result.stderr[:300]!r} "
+                f"prompt_preview={prompt[:100]!r}\n"
+            )
+            raise RuntimeError("claude CLI returned empty stdout")
+        return out
     finally:
         try:
             os.unlink(tmp_path)
         except Exception:
             pass
+
+
+def _call_openrouter_websearch(query: str, max_tokens: int) -> str:
+    """OpenRouter has `:online` model variants with built-in web search."""
+    try:
+        import yaml
+        cfg_path = Path("D:/D-claude/daily_brief/config.yaml")
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        or_key = (cfg.get("openrouter") or {}).get("api_key", "")
+    except Exception:
+        or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not or_key:
+        raise RuntimeError("No OpenRouter key for websearch fallback")
+
+    import openai
+    or_client = openai.OpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+    resp = or_client.chat.completions.create(
+        model="anthropic/claude-3.5-haiku:online",  # :online enables web search
+        max_tokens=max_tokens,
+        messages=[{
+            "role": "user",
+            "content": f"Search: {query}\n\nProvide top 3 findings with source URLs and brief summaries.",
+        }],
+    )
+    return resp.choices[0].message.content or ""
+
+
+def _call_openrouter(model: str, system: str, user: str, max_tokens: int, temperature: float) -> str:
+    """Fallback: OpenRouter via OpenAI-compatible API."""
+    try:
+        import yaml
+        cfg_path = Path("D:/D-claude/daily_brief/config.yaml")
+        with open(cfg_path, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f) or {}
+        or_key = (cfg.get("openrouter") or {}).get("api_key", "")
+    except Exception:
+        or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    if not or_key:
+        raise RuntimeError("No OpenRouter key available")
+
+    import openai
+    or_client = openai.OpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
+    # Translate model ID: claude-opus-4-6 -> anthropic/claude-opus-4
+    or_model = "anthropic/" + model.replace("claude-", "claude-")
+    resp = or_client.chat.completions.create(
+        model=or_model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    )
+    return resp.choices[0].message.content or ""
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30))
@@ -111,7 +176,7 @@ def call_claude(
     max_tokens: int = 8000,
     temperature: float = 0.3,
 ):
-    """Call Claude with retry. Uses direct SDK if API key set, else CLI."""
+    """Call Claude with retry. Priority: direct SDK -> CLI -> OpenRouter."""
     if _client is not None:
         resp = _client.messages.create(
             model=model,
@@ -123,11 +188,16 @@ def call_claude(
         text = resp.content[0].text
     elif USE_CLI:
         prompt = f"System instructions:\n{system}\n\n---\n\n{user}"
-        text = _call_cli(prompt)
+        try:
+            text = _call_cli(prompt)
+        except Exception as e:
+            # CLI failed — fall back to OpenRouter if available
+            import sys as _sys
+            _sys.stderr.write(f"[WARN] CLI failed: {e}; falling back to OpenRouter\n")
+            text = _call_openrouter(model, system, user, max_tokens, temperature)
     else:
-        raise RuntimeError(
-            "No Claude access available. Set ANTHROPIC_API_KEY or install claude CLI."
-        )
+        # No CLI — try OpenRouter directly
+        text = _call_openrouter(model, system, user, max_tokens, temperature)
     if parse_json:
         return _extract_json(text)
     return text
@@ -164,11 +234,14 @@ def websearch(query: str, max_tokens: int = 4000) -> dict:
             "Then provide the top 3 findings with source URLs and brief summaries. "
             "Format as plain text with clear URL citations."
         )
-        text = _call_cli(prompt)
+        try:
+            text = _call_cli(prompt)
+        except Exception as e:
+            import sys as _sys
+            _sys.stderr.write(f"[WARN] CLI websearch failed: {e}; falling back to OpenRouter :online\n")
+            text = _call_openrouter_websearch(query, max_tokens)
     else:
-        raise RuntimeError(
-            "No Claude access available. Set ANTHROPIC_API_KEY or install claude CLI."
-        )
+        text = _call_openrouter_websearch(query, max_tokens)
     return {
         "query": query,
         "results": text.strip(),
