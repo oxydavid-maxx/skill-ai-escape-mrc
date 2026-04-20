@@ -48,8 +48,8 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
 
     assert result["phase_0_complete"] is True
     assert len(result["websearch_specific"]) == 2
-    assert len(result["websearch_meta"]) == 15
-    assert len(result["websearch_cross_domain"]) == 3
+    assert len(result["websearch_meta"]) == 6  # 3 categories x 2 sites (reduced from 15)
+    assert len(result["websearch_cross_domain"]) == 1  # top domain only (reduced from 3)
     assert len(result["meta_categories"]) == 3
     assert len(result["meta_domains"]) == 3
     assert len(result["wiki_pages"]) == 1

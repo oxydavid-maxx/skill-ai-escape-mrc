@@ -14,12 +14,12 @@ WIKI_INDEX_PATH = Path("D:/D-claude/personal-wiki/wiki/index.md")
 WIKI_CONCEPTS_DIR = Path("D:/D-claude/personal-wiki/wiki/concepts")
 MEMORY_GLOB = str(Path.home() / ".claude" / "projects" / "*" / "memory" / "feedback_*.md")
 
+# Reduced 5 -> 2 sites per user feedback: "20 searches is overkill".
+# Trade latency for coverage. GitHub (code) + Reddit (discussion) are the
+# highest-signal sources; others can be added via additional 8D runs if needed.
 PROMINENT_SITES = [
     "github.com",
     "reddit.com",
-    "stackoverflow.com",
-    "news.ycombinator.com",
-    "arxiv.org",
 ]
 
 
@@ -56,8 +56,11 @@ def phase_0_research(state: dict) -> dict:
                 websearch(f"{category} site:{site}")
             )
 
+    # Cross-domain: limit to 1 domain to save latency. First domain is most
+    # semantically distant per Opus's ordering (reduced from 3 to 1 per user
+    # feedback: "20 searches is overkill").
     state["websearch_cross_domain"] = []
-    for domain in meta["domains"]:
+    for domain in meta["domains"][:1]:
         state["websearch_cross_domain"].append(
             websearch(f"how does {domain} solve {meta['categories'][0]}")
         )

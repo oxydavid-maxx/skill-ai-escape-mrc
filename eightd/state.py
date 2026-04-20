@@ -31,6 +31,7 @@ class EightDState(TypedDict, total=False):
     phase_3_rounds: list[dict]
     phase_3_verdict: Optional[Literal["EXHAUSTED", "REWORK"]]
     phase_3_complete: bool
+    phase_3_attempt_count: int  # outer Phase2<->Phase3 loop attempt
 
     # Phase 4: Corrective + Prevention per quadrant
     phase_4_complete: bool
@@ -42,6 +43,7 @@ class EightDState(TypedDict, total=False):
     phase_5_rounds: list[dict]
     phase_5_verdict: Optional[Literal["EXHAUSTED", "REWORK"]]
     phase_5_complete: bool
+    phase_5_attempt_count: int  # outer Phase4<->Phase5 loop attempt
 
     # Phase 6: Verification + Proof of Action
     phase_6_complete: bool
