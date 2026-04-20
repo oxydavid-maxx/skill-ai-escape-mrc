@@ -1,116 +1,95 @@
-# 8D Report — [Problem Title]
+# 8D Report: {problem_slug}
 
-**Date**: YYYY-MM-DD
-**Team**: [names and roles]
-**Status**: [Open / Closed]
+**Date**: {date}
+**Problem**: {problem}
+**Run ID**: {run_id}
 
 ---
 
-## D1: Team
+## Section A: Root Cause Matrix
 
-| Role | Name | Expertise |
-|------|------|-----------|
-| Problem Owner | | |
-| Root Cause Analyst | | |
-| Independent Auditor | | |
+|       | Non-Conformance (NC)                 | Non-Detection (ND)                   |
+|-------|--------------------------------------|--------------------------------------|
+| TRC   | Q1: {q1_trc_nc_root}                 | Q2: {q2_trc_nd_root}                 |
+| MRC   | Q3: {q3_mrc_nc_root}                 | Q4: {q4_mrc_nd_root}                 |
 
-## D2: Problem Definition (IS/IS NOT)
+---
 
-| Dimension | IS | IS NOT | DISTINCTION |
-|-----------|-----|--------|-------------|
-| WHAT | | | |
-| WHERE | | | |
-| WHEN | | | |
-| EXTENT | | | |
+## Section B: Corrective Actions Matrix
 
-## D3: Containment (Immediate Actions)
+|       | Non-Conformance (NC)                 | Non-Detection (ND)                   |
+|-------|--------------------------------------|--------------------------------------|
+| TRC   | Q1: {q1_corrective}                  | Q2: {q2_corrective}                  |
+| MRC   | Q3: {q3_corrective}                  | Q4: {q4_corrective}                  |
 
-| # | Action | Owner | Date | Status |
-|---|--------|-------|------|--------|
-| 1 | | | | |
+---
 
-## D4: Root Cause Analysis (Four Quadrants)
+## Section B2: Prevention Actions Matrix
 
-### Q1: Technical × Occurrence
+|       | Non-Conformance (NC)                 | Non-Detection (ND)                   |
+|-------|--------------------------------------|--------------------------------------|
+| TRC   | Q1: {q1_prevention}                  | Q2: {q2_prevention}                  |
+| MRC   | Q3: {q3_prevention}                  | Q4: {q4_prevention}                  |
 
-```
-Why-1: → because
-Why-2: → because
-...
-Why-N: [ROOT CAUSE]
+---
 
-First-Principles Test:
-- Condition: [pass/fail]
-- On/Off: [pass/fail]
-- Class: [pass/fail]
-- Controllability: [pass/fail]
-```
+## Section C: Proof of Action Matrix
 
-### Q2: Technical × Non-Detection
+|       | Non-Conformance (NC)                                       | Non-Detection (ND)                                         |
+|-------|------------------------------------------------------------|------------------------------------------------------------|
+| TRC   | Q1: metric={q1_metric}, target={q1_target}                 | Q2: metric={q2_metric}, target={q2_target}                 |
+| MRC   | Q3: metric={q3_metric}, target={q3_target}                 | Q4: metric={q4_metric}, target={q4_target}                 |
 
-```
-Why-1: → because
-...
-```
+---
 
-### Q3: Managerial × Occurrence
+## Phase 1: IS / IS NOT
 
-```
-Why-1: → because
-...
-```
+{is_isnt_table_rendered}
 
-### Q4: Managerial × Non-Detection
+---
 
-```
-Why-1: → because
-...
-```
+## Phase 2: Why Chains (4 quadrants)
 
-### Audit Score
+{why_chains_rendered}
 
-| Quadrant | Specificity | Depth | Verifiability | Controllability | Completeness | Verdict |
-|----------|:-----------:|:-----:|:-------------:|:---------------:|:------------:|:-------:|
-| Q1 | /3 | /3 | /3 | /3 | /3 | |
-| Q2 | /3 | /3 | /3 | /3 | /3 | |
-| Q3 | /3 | /3 | /3 | /3 | /3 | |
-| Q4 | /3 | /3 | /3 | /3 | /3 | |
+---
 
-## D5: Corrective Actions (Q1, Q2)
+## Phase 3: RC Audit Rounds
 
-| # | Quadrant | Action | Owner | Date | Evidence |
-|---|----------|--------|-------|------|----------|
-| 1 | Q1 | | | | |
-| 2 | Q2 | | | | |
+{phase_3_rounds_rendered}
 
-## D6: Prevention Actions (Q3, Q4)
+---
 
-| # | Quadrant | Action | Gate: Scope | Gate: Persistence | Gate: Measurability | Verdict |
-|---|----------|--------|:-----------:|:-----------------:|:-------------------:|:-------:|
-| 1 | Q3 | | | | | |
-| 2 | Q4 | | | | | |
+## Phase 4: Full Actions (Corrective + Prevention) per Quadrant
 
-## D7: Verification Plan
+{phase_4_rendered}
 
-| # | Prevention Action | Metric | Data Source | Timeframe | Success Criteria | Failure Action |
-|---|------------------|--------|-------------|-----------|------------------|----------------|
-| 1 | | | | 6 months | | |
-| 2 | | | | 6 months | | |
+---
 
-## D8: Lessons Learned & Horizontal Deployment
+## Phase 5: Prevention Audit Rounds
 
-### Lessons Learned
-1.
+{phase_5_rounds_rendered}
 
-### Horizontal Deployment
-| Similar product/process | Action taken | Status |
-|------------------------|-------------|--------|
-| | | |
+---
 
-### Documents Updated
-- [ ] FMEA
-- [ ] Control Plan
-- [ ] Work Instructions
-- [ ] Design Review Checklist
-- [ ] CI/CD Pipeline Rules
-- [ ] Onboarding Template
+## Phase 6: Verification Plan + Proof of Action
+
+{phase_6_rendered}
+
+---
+
+## SoA Citations (deduplicated)
+
+{soa_citations_rendered}
+
+---
+
+## Closure Audit
+
+{closure_audit_rendered}
+
+---
+
+## Wiki Ingest Drafts
+
+{wiki_ingest_drafts_rendered}
