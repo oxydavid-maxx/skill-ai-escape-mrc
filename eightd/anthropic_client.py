@@ -1,11 +1,37 @@
 """Thin Anthropic client wrapper with retry + JSON extraction + websearch."""
 import json
+import os
 import re
 import time
+from pathlib import Path
 from anthropic import Anthropic
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-_client = Anthropic()
+
+def _resolve_api_key() -> str:
+    """Priority: ANTHROPIC_API_KEY env -> daily_brief config.yaml anthropic.api_key -> env ANTHROPIC fallback."""
+    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if key:
+        return key
+    cfg_path = Path("D:/D-claude/daily_brief/config.yaml")
+    if cfg_path.exists():
+        try:
+            import yaml
+            with open(cfg_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            k = (cfg.get("anthropic") or {}).get("api_key", "")
+            if k:
+                return k.strip()
+        except Exception:
+            pass
+    return ""
+
+
+_api_key = _resolve_api_key()
+if _api_key:
+    _client = Anthropic(api_key=_api_key)
+else:
+    _client = Anthropic()  # will raise on first call if no key discoverable
 
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30))

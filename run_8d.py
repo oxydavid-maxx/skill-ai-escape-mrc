@@ -39,7 +39,7 @@ def main():
         print(f"Would invoke graph with run_id={run_id}")
         return 0
 
-    with SqliteSaver.from_conn_string(f"sqlite:///{db_path}") as checkpointer:
+    with SqliteSaver.from_conn_string(str(db_path)) as checkpointer:
         graph = build_graph(checkpointer=checkpointer)
         config = {"configurable": {"thread_id": run_id}}
 
