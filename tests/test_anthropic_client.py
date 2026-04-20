@@ -24,6 +24,42 @@ def test_extract_json_no_fence_language():
     assert _extract_json(text) == {"y": 3}
 
 
+def test_extract_json_embedded_in_prose():
+    text = 'Here is the result:\n{"a": 1, "b": [2, 3]}\nThanks!'
+    assert _extract_json(text) == {"a": 1, "b": [2, 3]}
+
+
+def test_extract_json_array_embedded_in_prose():
+    text = 'The categories are:\n["workflow-orchestration", "state-machines"]\nas you requested.'
+    assert _extract_json(text) == ["workflow-orchestration", "state-machines"]
+
+
+def test_extract_json_nested_with_quoted_braces():
+    text = '{"message": "She said \\"hi {world}\\"", "count": 2}'
+    assert _extract_json(text) == {"message": 'She said "hi {world}"', "count": 2}
+
+
+def test_extract_json_preamble_and_postamble():
+    text = 'Sure! Here is the JSON:\n\n```json\n{"categories": ["a", "b", "c"], "domains": ["x", "y", "z"]}\n```\n\nLet me know if you need anything else.'
+    got = _extract_json(text)
+    assert got["categories"] == ["a", "b", "c"]
+    assert got["domains"] == ["x", "y", "z"]
+
+
+def test_extract_json_empty_raises():
+    import json as _json
+    import pytest as _pytest
+    with _pytest.raises(_json.JSONDecodeError):
+        _extract_json("")
+
+
+def test_extract_json_no_json_raises():
+    import json as _json
+    import pytest as _pytest
+    with _pytest.raises(_json.JSONDecodeError):
+        _extract_json("just some prose with no json at all")
+
+
 def test_call_claude_returns_text():
     with patch("eightd.anthropic_client._client") as mock_client:
         mock_resp = MagicMock()
