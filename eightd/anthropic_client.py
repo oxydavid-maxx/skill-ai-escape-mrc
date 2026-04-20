@@ -133,7 +133,7 @@ def _call_openrouter_websearch(query: str, max_tokens: int) -> str:
     import openai
     or_client = openai.OpenAI(api_key=or_key, base_url="https://openrouter.ai/api/v1")
     resp = or_client.chat.completions.create(
-        model="anthropic/claude-3.5-haiku:online",  # :online enables web search
+        model="anthropic/claude-sonnet-4:online",  # :online enables web search; sonnet for search-summary is sufficient and avoids opus cost overruns. User directive: no haiku.
         max_tokens=max_tokens,
         messages=[{
             "role": "user",
@@ -248,6 +248,12 @@ def call_claude(
 def websearch(query: str, max_tokens: int = 4000) -> dict:
     """Web search via Claude. SDK path uses web_search tool; CLI path asks Claude
     Code to search (which has WebSearch tool built in)."""
+    # Progress: emit websearch start
+    try:
+        from eightd import progress as _p
+        _p.emit("websearch", "search_start", {"query": query[:80]})
+    except Exception:
+        pass
     if _client is not None:
         resp = _client.messages.create(
             model="claude-sonnet-4-6",
@@ -283,6 +289,12 @@ def websearch(query: str, max_tokens: int = 4000) -> dict:
             text = _call_openrouter_websearch(query, max_tokens)
     else:
         text = _call_openrouter_websearch(query, max_tokens)
+    # Progress: emit websearch end
+    try:
+        from eightd import progress as _p
+        _p.emit("websearch", "search_end", {"query": query[:80], "text_len": len(text)})
+    except Exception:
+        pass
     return {
         "query": query,
         "results": text.strip(),
