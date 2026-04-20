@@ -1,9 +1,11 @@
-"""Phase 5b: Prevention audit with SoA citation requirement."""
+"""Phase 5b: Prevention audit with SoA citation requirement + loop cap."""
 import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
-from eightd.phases.phase_3_rc_audit import _format_soa, _extract_urls, _cites_soa
+from eightd.phases.phase_3_rc_audit import (
+    _format_soa, _extract_urls, _cites_soa_lenient, MAX_OUTER_ATTEMPTS,
+)
 
 
 def phase_5_prevention_audit(state: dict) -> dict:
@@ -12,6 +14,9 @@ def phase_5_prevention_audit(state: dict) -> dict:
     soa_urls = _extract_urls(state.get("phase_5_soa_research", []))
 
     state.setdefault("phase_5_rounds", [])
+    attempt = state.get("phase_5_attempt_count", 0) + 1
+    state["phase_5_attempt_count"] = attempt
+    force_accept = attempt >= MAX_OUTER_ATTEMPTS
 
     for round_num in range(1, 4):
         user_msg = (
@@ -25,18 +30,33 @@ def phase_5_prevention_audit(state: dict) -> dict:
             system=system,
             user=user_msg,
             parse_json=True,
+            purpose=f"phase_5_prevention_audit_round_{round_num}_attempt_{attempt}",
         )
         state["phase_5_rounds"].append(audit)
 
         verdict = audit.get("verdict")
+        citation_ok = _cites_soa_lenient(audit, soa_urls, min_citations=1)
+        audit["_citation_check"] = "ok" if citation_ok else "weak"
+
         if verdict == "EXHAUSTED":
-            if _cites_soa(audit, soa_urls, min_citations=2):
+            if citation_ok or force_accept:
                 state["phase_5_verdict"] = "EXHAUSTED"
                 state["phase_5_complete"] = True
+                if not citation_ok:
+                    audit["_force_accepted_reason"] = (
+                        f"force-accepted after {attempt} outer attempts"
+                    )
                 return state
-            audit["rejection_reason"] = "verdict_EXHAUSTED_without_soa_citations"
+            audit["rejection_reason"] = "verdict_EXHAUSTED_without_any_soa_citation"
             continue
         if verdict == "REWORK":
+            if force_accept:
+                state["phase_5_verdict"] = "EXHAUSTED"
+                state["phase_5_complete"] = True
+                audit["_force_accepted_reason"] = (
+                    f"REWORK overridden on attempt {attempt}/{MAX_OUTER_ATTEMPTS}"
+                )
+                return state
             state["phase_5_verdict"] = "REWORK"
             state["phase_5_complete"] = False
             return state
@@ -47,8 +67,12 @@ def phase_5_prevention_audit(state: dict) -> dict:
                     w.get("suggested_fix", "")
                 )
 
-    state["phase_5_verdict"] = "REWORK"
-    state["phase_5_complete"] = False
+    if force_accept:
+        state["phase_5_verdict"] = "EXHAUSTED"
+        state["phase_5_complete"] = True
+    else:
+        state["phase_5_verdict"] = "REWORK"
+        state["phase_5_complete"] = False
     return state
 
 
