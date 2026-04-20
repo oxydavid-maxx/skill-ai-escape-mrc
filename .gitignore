@@ -1,0 +1,11 @@
+# LangGraph runtime state (per-run SQLite + logs)
+runs/
+# Model discovery cache
+.anthropic-models-cache.json
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+# Editor swap
+*.swp
+*.swo
