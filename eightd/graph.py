@@ -1,4 +1,5 @@
 """LangGraph StateGraph construction for 8D pipeline."""
+from functools import wraps
 from langgraph.graph import StateGraph, START, END
 from eightd.state import EightDState
 
@@ -17,20 +18,47 @@ from eightd.phases.phase_7_soa import phase_7_soa_research
 from eightd.phases.phase_7_report import phase_7_report
 
 
+def _wrap_with_progress(name: str, fn):
+    """Decorator: emit phase_start / phase_end around each node invocation."""
+    @wraps(fn)
+    def wrapper(state):
+        try:
+            from eightd import progress as _p
+            _p.phase_start(name, {"state_keys": list(state.keys())[:20]})
+        except Exception:
+            pass
+        try:
+            result = fn(state)
+            try:
+                from eightd import progress as _p
+                _p.phase_end(name, {"ok": True})
+            except Exception:
+                pass
+            return result
+        except Exception as e:
+            try:
+                from eightd import progress as _p
+                _p.emit(name, "phase_error", {"error": type(e).__name__, "message": str(e)[:300]})
+            except Exception:
+                pass
+            raise
+    return wrapper
+
+
 def build_graph(checkpointer=None):
     g = StateGraph(EightDState)
 
-    g.add_node("phase_0_research", phase_0_research)
-    g.add_node("phase_1_is_isnt", phase_1_is_isnt)
-    g.add_node("phase_2_why_analysis", phase_2_why_analysis)
-    g.add_node("phase_3_soa", phase_3_soa_research)
-    g.add_node("phase_3_rc_audit", phase_3_rc_audit)
-    g.add_node("phase_4_actions", phase_4_actions)
-    g.add_node("phase_5_soa", phase_5_soa_research)
-    g.add_node("phase_5_prevention_audit", phase_5_prevention_audit)
-    g.add_node("phase_6_verification", phase_6_verification)
-    g.add_node("phase_7_soa", phase_7_soa_research)
-    g.add_node("phase_7_report", phase_7_report)
+    g.add_node("phase_0_research", _wrap_with_progress("phase_0_research", phase_0_research))
+    g.add_node("phase_1_is_isnt", _wrap_with_progress("phase_1_is_isnt", phase_1_is_isnt))
+    g.add_node("phase_2_why_analysis", _wrap_with_progress("phase_2_why_analysis", phase_2_why_analysis))
+    g.add_node("phase_3_soa", _wrap_with_progress("phase_3_soa", phase_3_soa_research))
+    g.add_node("phase_3_rc_audit", _wrap_with_progress("phase_3_rc_audit", phase_3_rc_audit))
+    g.add_node("phase_4_actions", _wrap_with_progress("phase_4_actions", phase_4_actions))
+    g.add_node("phase_5_soa", _wrap_with_progress("phase_5_soa", phase_5_soa_research))
+    g.add_node("phase_5_prevention_audit", _wrap_with_progress("phase_5_prevention_audit", phase_5_prevention_audit))
+    g.add_node("phase_6_verification", _wrap_with_progress("phase_6_verification", phase_6_verification))
+    g.add_node("phase_7_soa", _wrap_with_progress("phase_7_soa", phase_7_soa_research))
+    g.add_node("phase_7_report", _wrap_with_progress("phase_7_report", phase_7_report))
 
     g.add_edge(START, "phase_0_research")
     g.add_edge("phase_0_research", "phase_1_is_isnt")

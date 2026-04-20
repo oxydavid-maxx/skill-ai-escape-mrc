@@ -63,7 +63,7 @@ USE_CLI = not _api_key and _CLAUDE_PATH is not None
 _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
-def _call_cli(prompt: str, timeout: int = 300) -> str:
+def _call_cli(prompt: str, model: str | None = None, timeout: int = 300) -> str:
     """Call Claude via CLI subprocess. Uses user's Claude Code subscription.
 
     MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env — otherwise
@@ -71,11 +71,16 @@ def _call_cli(prompt: str, timeout: int = 300) -> str:
     See module docstring.
 
     Logs stdout/stderr preview on empty output for debugging.
+    Passes --model when provided (user directive: use latest strongest).
     """
     import sys as _sys
     child_env = os.environ.copy()
     child_env.pop("CLAUDECODE", None)
     child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+
+    args = [_CLAUDE_PATH, "-p", "--output-format", "text"]
+    if model:
+        args.extend(["--model", model])
 
     fd, tmp_path = tempfile.mkstemp(suffix=".txt", prefix="eightd_prompt_")
     os.close(fd)
@@ -83,7 +88,7 @@ def _call_cli(prompt: str, timeout: int = 300) -> str:
         Path(tmp_path).write_text(prompt, encoding="utf-8")
         with open(tmp_path, "r", encoding="utf-8") as stdin_f:
             result = subprocess.run(
-                [_CLAUDE_PATH, "-p", "--output-format", "text"],
+                args,
                 stdin=stdin_f,
                 capture_output=True,
                 text=True,
@@ -195,8 +200,18 @@ def call_claude(
     parse_json: bool = False,
     max_tokens: int = 8000,
     temperature: float = 0.3,
+    purpose: str = "unknown",
 ):
-    """Call Claude with retry. Priority: direct SDK -> CLI -> OpenRouter."""
+    """Call Claude with retry. Priority: direct SDK -> CLI -> OpenRouter.
+
+    Emits progress events if eightd.progress is initialized.
+    """
+    # Progress: emit start event
+    try:
+        from eightd import progress as _p
+        _p.emit("llm", "llm_call_start", {"purpose": purpose, "prompt_len": len(user)}, model=model)
+    except Exception:
+        pass
     if _client is not None:
         resp = _client.messages.create(
             model=model,
@@ -209,15 +224,21 @@ def call_claude(
     elif USE_CLI:
         prompt = f"System instructions:\n{system}\n\n---\n\n{user}"
         try:
-            text = _call_cli(prompt)
+            text = _call_cli(prompt, model=model)
         except Exception as e:
             # CLI failed — fall back to OpenRouter if available
             import sys as _sys
-            _sys.stderr.write(f"[WARN] CLI failed: {e}; falling back to OpenRouter\n")
+            _sys.stderr.write(f"[WARN] CLI failed ({model}): {e}; falling back to OpenRouter\n")
             text = _call_openrouter(model, system, user, max_tokens, temperature)
     else:
         # No CLI — try OpenRouter directly
         text = _call_openrouter(model, system, user, max_tokens, temperature)
+    # Progress: emit end event
+    try:
+        from eightd import progress as _p
+        _p.emit("llm", "llm_call_end", {"purpose": purpose, "text_len": len(text)}, model=model)
+    except Exception:
+        pass
     if parse_json:
         return _extract_json(text)
     return text

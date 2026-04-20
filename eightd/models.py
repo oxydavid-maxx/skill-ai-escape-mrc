@@ -14,17 +14,21 @@ FALLBACK_MODELS = {
     "haiku": "claude-haiku-4-5-20251001",
 }
 
+# Per user directive 2026-04-21: use LATEST STRONGEST model (Opus) for ALL
+# roles. Never silently downgrade to Haiku or Sonnet. If Opus is unavailable
+# (rate limit, etc.), fail loudly instead of silently degrading quality.
+# User has Max subscription — cost is covered.
 TIER_ROLES = {
     "opus": [
         "why_analysis", "rc_audit", "prevention_audit", "closure_audit",
         "corrective_action", "prevention_action", "proof_of_action",
-    ],
-    "sonnet": [
+        # Previously sonnet:
         "meta_categorization", "report_generation", "is_isnt_extraction",
-    ],
-    "haiku": [
+        # Previously haiku:
         "keyword_extraction", "simple_classification",
     ],
+    "sonnet": [],
+    "haiku": [],
 }
 
 

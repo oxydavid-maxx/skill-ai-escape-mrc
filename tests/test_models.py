@@ -35,7 +35,8 @@ def test_latest_in_tier_fallback_when_empty():
     assert _latest_in_tier([], "opus") == FALLBACK_MODELS["opus"]
 
 
-def test_model_for_role_dispatches_by_tier():
+def test_model_for_role_all_roles_use_opus():
+    """Per user directive 2026-04-21: all roles use opus, no silent downgrade."""
     with patch("eightd.models.get_models") as mock_get:
         mock_get.return_value = {
             "opus": "claude-opus-4-7",
@@ -43,8 +44,9 @@ def test_model_for_role_dispatches_by_tier():
             "haiku": "claude-haiku-4-5",
         }
         assert model_for_role("rc_audit") == "claude-opus-4-7"
-        assert model_for_role("report_generation") == "claude-sonnet-4-7"
-        assert model_for_role("keyword_extraction") == "claude-haiku-4-5"
+        assert model_for_role("report_generation") == "claude-opus-4-7"
+        assert model_for_role("keyword_extraction") == "claude-opus-4-7"
+        assert model_for_role("meta_categorization") == "claude-opus-4-7"
 
 
 def test_model_for_role_unknown_defaults_sonnet():

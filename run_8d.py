@@ -39,9 +39,16 @@ def main():
         print(f"Would invoke graph with run_id={run_id}")
         return 0
 
+    # Init progress logging (emits heartbeat events to run_dir/progress.jsonl)
+    try:
+        from eightd import progress as _progress
+        _progress.init(run_dir)
+    except Exception:
+        pass
+
     with SqliteSaver.from_conn_string(str(db_path)) as checkpointer:
         graph = build_graph(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": run_id}}
+        config = {"configurable": {"thread_id": run_id, "recursion_limit": 100}}
 
         if args.resume_id:
             initial = None

@@ -68,6 +68,22 @@ def _render_report(state: dict) -> str:
 
 
 def _state_summary(state: dict) -> dict:
+    # Load progress log if available for timeline section
+    progress_events = []
+    try:
+        run_dir = state.get("run_dir")
+        if run_dir:
+            p_path = Path(run_dir) / "progress.jsonl"
+            if p_path.exists():
+                with open(p_path, encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            progress_events.append(json.loads(line))
+                        except Exception:
+                            pass
+    except Exception:
+        pass
+
     return {
         "problem": state.get("problem"),
         "run_id": state.get("run_id"),
@@ -79,8 +95,14 @@ def _state_summary(state: dict) -> dict:
         "proof_of_action": state.get("proof_of_action"),
         "verification_plan": state.get("verification_plan"),
         "phase_3_rounds": state.get("phase_3_rounds"),
+        "phase_3_soa_research": state.get("phase_3_soa_research"),
         "phase_5_rounds": state.get("phase_5_rounds"),
+        "phase_5_soa_research": state.get("phase_5_soa_research"),
+        "phase_7_soa_research": state.get("phase_7_soa_research"),
         "soa_urls_deduped": sorted(_collect_soa_urls(state)),
+        "pipeline_timeline": progress_events,
+        "meta_categories": state.get("meta_categories"),
+        "meta_domains": state.get("meta_domains"),
     }
 
 
