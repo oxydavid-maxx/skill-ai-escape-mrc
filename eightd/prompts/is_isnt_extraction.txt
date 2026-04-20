@@ -1,0 +1,12 @@
+Produce Phase 1 IS/IS NOT problem definition.
+
+Output JSON:
+{
+  "what": {"is": "...", "is_not": "...", "distinction": "..."},
+  "where": {"is": "...", "is_not": "...", "distinction": "..."},
+  "when": {"is": "...", "is_not": "...", "distinction": "..."},
+  "extent": {"is": "...", "is_not": "...", "distinction": "..."}
+}
+
+The DISTINCTION column explains WHY the difference matters — what
+changes the distinction implies for root cause hypotheses.

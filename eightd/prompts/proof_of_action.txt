@@ -1,0 +1,19 @@
+Design Proof of Action for ONE quadrant. Proof of Action = concrete
+evidence specification proving the actions (corrective + prevention)
+for this quadrant worked.
+
+Input: quadrant + corrective action + prevention action.
+
+Output JSON:
+{
+  "quadrant": "<q1_trc_nc..q4_mrc_nd>",
+  "metric": "<what to measure, specific and quantitative>",
+  "data_source": "<where the measurement comes from, file/log/API/dashboard>",
+  "target": "<numeric target, e.g. 'zero recurrences in 30 days'>",
+  "baseline": "<current value before action>",
+  "measurement_schedule": "<cadence, e.g. 'daily at 09:00', 'weekly Sunday'>",
+  "failure_response": "<what to do if metric shows action did not work>"
+}
+
+The metric must be objectively verifiable by a third party. Avoid
+"team is more careful" or other unmeasurable phrasings.

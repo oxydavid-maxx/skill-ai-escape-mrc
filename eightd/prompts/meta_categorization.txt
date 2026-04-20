@@ -1,0 +1,19 @@
+Step back from the problem specifics. Identify the HIGHER-LEVEL problem
+category this belongs to, and adjacent domains that solve this class.
+
+Output strict JSON:
+{
+  "categories": ["<3 abstract category names, NOT tool-specific>"],
+  "domains": ["<3 different domains/industries that solve this class>"]
+}
+
+Examples of abstract categories (GOOD): "workflow orchestration",
+"state invariant enforcement", "distributed consensus", "observability",
+"error budget management".
+
+Examples of tool-specific (BAD, DO NOT USE): "Claude Code hooks",
+"Python decorators", "Git pre-commit".
+
+Examples of adjacent domains: "game AI state machines",
+"financial workflow engines", "CI/CD pipeline gates",
+"aerospace fault tolerance".

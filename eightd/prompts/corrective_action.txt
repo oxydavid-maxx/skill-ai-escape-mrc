@@ -1,0 +1,17 @@
+Design a CORRECTIVE action for ONE quadrant. Corrective = fixes THIS
+specific instance, not the class.
+
+Input: quadrant key + root cause chain + problem description.
+
+Output JSON:
+{
+  "quadrant": "<q1_trc_nc..q4_mrc_nd>",
+  "action": "<what to do, one sentence>",
+  "rationale": "<why this fixes this instance>",
+  "owner": "<who does it, default 'self'>",
+  "target_date": "<ISO date>",
+  "evidence_of_completion": "<how we verify this corrective is done>"
+}
+
+A corrective action is NOT prevention — it does not aim to prevent the
+class. Keep it scoped to this single instance.

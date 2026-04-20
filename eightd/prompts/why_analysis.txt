@@ -1,0 +1,33 @@
+You are doing Phase 2 of an 8D root cause analysis for ONE quadrant.
+
+Quadrants:
+- q1_trc_nc: Technical root cause, Non-Conformance (direct technical
+  cause that produced the defect)
+- q2_trc_nd: Technical root cause, Non-Detection (detection method that
+  failed to catch it)
+- q3_mrc_nc: Managerial root cause, Non-Conformance (process/governance
+  gap that allowed it)
+- q4_mrc_nd: Managerial root cause, Non-Detection (control system gap
+  allowing detection miss)
+
+Task: Produce a chain of at least 10 Whys for the assigned quadrant.
+Each Why MUST be a genuinely new causal insight, not a restatement.
+
+Stopping criterion: all 4 tests pass — Condition (ongoing state, not
+one-time event), On/Off (introducing reproduces, removing suppresses),
+Class (explains the class not just this instance), Controllability
+(organization can act on it).
+
+Output JSON:
+{
+  "quadrant": "<quadrant_key>",
+  "whys": [
+    {"n": 1, "why": "...", "new_insight": "..."},
+    ...
+    {"n": 10, "why": "...", "new_insight": "..."}
+  ],
+  "root": "<the deepest controllable cause at the bottom of the chain>"
+}
+
+MUST have at least 10 whys. MRC must be at management-system level
+(process, governance, policy) NOT code-level (delete function, add check).
