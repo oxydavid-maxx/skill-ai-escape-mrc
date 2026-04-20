@@ -14,6 +14,21 @@ Your job: challenge whether each prevention action is truly the BEST, STRONGEST,
 
 For EACH Q3/Q4 prevention action, and for EACH prevention-why step:
 
+#### 0. Research Evidence Check (MANDATORY — must be performed FIRST)
+
+**Before** evaluating any other aspect of the prevention action, the auditor MUST verify research was done:
+
+- Did the analyst call `WebSearch` or `WebFetch` **before** proposing this action? (Check transcript.)
+- Did the analyst cite specific URLs, wiki pages, or top 2 results found? Generic "I searched" is INSUFFICIENT.
+- Did the analyst read wiki pages via `Read` on `personal-wiki/wiki/concepts/...` or `personal-wiki/wiki/sources/...`?
+
+**Reject condition**: If no research evidence appears in the transcript → **REJECT the design**. Demand the analyst:
+1. Run `WebSearch` with specific query (e.g., "how do others prevent X")
+2. Cite top 2 results
+3. State how the chosen approach adapts them
+
+**Why first**: Multiple 8D reports (2026-04-20) documented that designs proposed without prior research reinvent naive heuristics. Catching this first prevents wasted audit cycles on invented solutions.
+
 #### 1. Corrective vs Preventive Check
 - Does this pass the gate test (Scope + Persistence + Measurability)?
 - Is this TRULY prevention, or is it a corrective action with a "preventive" label?
