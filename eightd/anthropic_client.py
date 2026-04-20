@@ -4,6 +4,18 @@ Priority chain for LLM calls:
 1. ANTHROPIC_API_KEY env var  -> direct SDK (fastest)
 2. daily_brief config.yaml anthropic.api_key -> direct SDK
 3. claude CLI subprocess      -> uses Claude Code subscription (no extra cost)
+
+## CLAUDECODE env note
+
+When this module is invoked from inside a Claude Code Bash subprocess
+(e.g. run_8d.py called via Bash tool), the parent env has CLAUDECODE=1
+set. Child `claude` CLI detects this and refuses to launch with
+"Claude Code cannot be launched inside another Claude Code session" —
+producing a SILENT HANG via subprocess.run (child dies writing error
+to stderr but parent blocks reading).
+
+Documented fix: strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env.
+Source: anthropics/claude-agent-sdk-python Issue #573
 """
 import json
 import os
@@ -52,7 +64,18 @@ _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
 def _call_cli(prompt: str, timeout: int = 600) -> str:
-    """Call Claude via CLI subprocess. Uses user's Claude Code subscription."""
+    """Call Claude via CLI subprocess. Uses user's Claude Code subscription.
+
+    MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env — otherwise
+    claude CLI detects nested session and refuses (silent hang).
+    See module docstring.
+    """
+    # Strip CLAUDECODE from subprocess env to allow claude CLI to run
+    # inside another Claude Code session (docs: claude-agent-sdk-python#573)
+    child_env = os.environ.copy()
+    child_env.pop("CLAUDECODE", None)
+    child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+
     fd, tmp_path = tempfile.mkstemp(suffix=".txt", prefix="eightd_prompt_")
     os.close(fd)
     try:
@@ -67,6 +90,7 @@ def _call_cli(prompt: str, timeout: int = 600) -> str:
                 encoding="utf-8",
                 errors="replace",
                 shell=False,
+                env=child_env,
             )
         if result.returncode != 0:
             raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:500]}")
