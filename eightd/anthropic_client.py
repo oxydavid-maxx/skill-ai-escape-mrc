@@ -192,7 +192,24 @@ def _translate_model_for_openrouter(model: str) -> str:
     return "anthropic/claude-sonnet-4"  # default
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30))
+def _should_retry(retry_state):
+    """Retry on network/API errors, NOT on JSON parse errors.
+
+    JSON parse failures are deterministic given same prompt — retrying the
+    exact same input yields the exact same failure. Instead, call_claude
+    handles parse errors by attempting an explicit JSON-only retry.
+    """
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if exc is None:
+        return False
+    import json as _j
+    if isinstance(exc, _j.JSONDecodeError):
+        return False
+    return True
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30),
+       retry=_should_retry)
 def call_claude(
     model: str,
     system: str,
@@ -205,6 +222,8 @@ def call_claude(
     """Call Claude with retry. Priority: direct SDK -> CLI -> OpenRouter.
 
     Emits progress events if eightd.progress is initialized.
+    On JSON parse failure, retries ONCE with a stricter prompt (not via
+    tenacity, which retries the identical prompt).
     """
     # Progress: emit start event
     try:
@@ -240,7 +259,41 @@ def call_claude(
     except Exception:
         pass
     if parse_json:
-        return _extract_json(text)
+        try:
+            return _extract_json(text)
+        except json.JSONDecodeError:
+            # One explicit JSON-only retry with stricter prompt
+            _dump_parse_failure(text, f"{purpose}_first_attempt")
+            stricter_system = system + (
+                "\n\nCRITICAL: Your previous response was not valid JSON. "
+                "OUTPUT ONLY A SINGLE JSON OBJECT OR ARRAY. No prose, no markdown, no code fences, no explanation. "
+                "Start your response with { or [ and end with } or ]. Nothing else."
+            )
+            # Directly re-call WITHOUT tenacity (single attempt)
+            import sys as _sys
+            _sys.stderr.write(f"[WARN] call_claude {purpose}: JSON parse failed, retrying with stricter prompt\n")
+            if _client is not None:
+                resp2 = _client.messages.create(
+                    model=model,
+                    max_tokens=max_tokens,
+                    temperature=0.0,  # minimize creativity on retry
+                    system=stricter_system,
+                    messages=[{"role": "user", "content": user}],
+                )
+                text2 = resp2.content[0].text
+            elif USE_CLI:
+                prompt2 = f"System instructions:\n{stricter_system}\n\n---\n\n{user}"
+                try:
+                    text2 = _call_cli(prompt2, model=model)
+                except Exception:
+                    text2 = _call_openrouter(model, stricter_system, user, max_tokens, 0.0)
+            else:
+                text2 = _call_openrouter(model, stricter_system, user, max_tokens, 0.0)
+            try:
+                return _extract_json(text2)
+            except json.JSONDecodeError:
+                _dump_parse_failure(text2, f"{purpose}_second_attempt")
+                raise
     return text
 
 
@@ -302,6 +355,19 @@ def websearch(query: str, max_tokens: int = 4000) -> dict:
     }
 
 
+def _dump_parse_failure(text: str, context: str = ""):
+    """Save failed text to runs/_parse_failures/ for post-mortem."""
+    try:
+        import datetime
+        dump_dir = Path(__file__).parent.parent / "runs" / "_parse_failures"
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        dump = dump_dir / f"{ts}_{context}.txt"
+        dump.write_text(text, encoding="utf-8")
+    except Exception:
+        pass
+
+
 def _extract_json(text: str):
     """Robust JSON extraction — multiple fallback strategies for LLM outputs.
 
@@ -310,6 +376,8 @@ def _extract_json(text: str):
     2. Fenced code block with ```json or plain ```
     3. JSON embedded in prose (finds outermost balanced {} or [])
     4. Multiple JSON blocks (returns first valid)
+
+    On total failure, saves raw text to runs/_parse_failures/ for debug.
     """
     if not text or not text.strip():
         raise json.JSONDecodeError("empty input", text or "", 0)
@@ -368,9 +436,10 @@ def _extract_json(text: str):
                             break  # try next opener
             start = text.find(open_ch, start + 1)
 
-    # All strategies failed
+    # All strategies failed — dump + raise
+    _dump_parse_failure(text, "extract_json_all_strategies_failed")
     raise json.JSONDecodeError(
-        f"no valid JSON found in text (first 200 chars: {text[:200]!r})",
+        f"no valid JSON found in text (first 300 chars: {text[:300]!r})",
         text,
         0,
     )
