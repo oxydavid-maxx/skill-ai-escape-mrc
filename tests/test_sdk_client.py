@@ -212,3 +212,20 @@ def test_call_claude_empty_text_raises():
             sdk_client.call_claude(
                 model="claude-opus-4-6", system="s", user="u", purpose="test",
             )
+
+
+def test_websearch_returns_expected_shape():
+    from eightd import sdk_client
+    msgs = [
+        FakeAssistantMessage([FakeTextBlock("- result 1\n- result 2")]),
+        FakeResultMessage(),
+    ]
+
+    def fake_query(*, prompt, options=None, **_):
+        return _async_iter(msgs)
+
+    with patch("eightd.sdk_client.query", side_effect=fake_query):
+        out = sdk_client.websearch("site:example.com topic")
+    assert out["query"] == "site:example.com topic"
+    assert "- result 1" in out["results"]
+    assert isinstance(out["timestamp"], float)

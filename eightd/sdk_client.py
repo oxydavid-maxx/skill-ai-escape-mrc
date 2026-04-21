@@ -284,3 +284,47 @@ def call_claude(
             _dump_parse_failure(text, f"{purpose}_first_attempt")
             raise
     return text
+
+
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30),
+       reraise=True)
+def websearch(query_text: str, max_tokens: int = 4000) -> dict:
+    """Web search via Agent SDK. Returns {query, results, timestamp}.
+
+    Drop-in replacement for anthropic_client.websearch. Uses SDK with
+    WebSearch tool permitted. No OpenRouter fallback — if the SDK cannot
+    complete, the retry decorator handles transient failures and ultimate
+    errors propagate to the caller.
+    """
+    _emit("websearch", "search_start", {"query": query_text[:80]})
+
+    system_prompt = "You are a web research assistant. Use the WebSearch tool when asked."
+    user_prompt = (
+        f"Please use the WebSearch tool to search for: {query_text}\n\n"
+        "Then provide the top 3 findings with source URLs and brief summaries. "
+        "Format as plain text with clear URL citations."
+    )
+
+    opts = ClaudeAgentOptions(
+        system_prompt=system_prompt,
+        setting_sources=None,
+        allowed_tools=["WebSearch"],
+        max_turns=5,
+        env=dict(_SDK_ENV),
+    )
+
+    async def _run():
+        return await _collect_messages(query(prompt=user_prompt, options=opts))
+
+    result = asyncio.run(asyncio.wait_for(_run(), timeout=180))
+    text = result["text"]
+    if not text:
+        raise RuntimeError("SDK websearch returned empty text")
+
+    _emit("websearch", "search_end",
+          {"query": query_text[:80], "text_len": len(text)})
+    return {
+        "query": query_text,
+        "results": text.strip(),
+        "timestamp": time.time(),
+    }
