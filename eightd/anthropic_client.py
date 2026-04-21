@@ -68,13 +68,28 @@ USE_CLI = not _api_key and _CLAUDE_PATH is not None and not _FORCE_OPENROUTER
 _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
-def _call_cli(system: str, user: str, model: str | None = None, timeout: int = 300) -> str:
+ALL_TOOLS_TO_BLOCK = "Task Bash Edit Read Write WebSearch WebFetch Grep Glob NotebookEdit"
+BLOCK_EXCEPT_WEBSEARCH = "Task Bash Edit Read Write WebFetch Grep Glob NotebookEdit"
+
+
+def _call_cli(system: str, user: str, model: str | None = None,
+              timeout: int = 300, allow_websearch: bool = False) -> str:
     """Call Claude via CLI subprocess. Uses user's Claude Code subscription.
 
     IMPORTANT: system and user are passed SEPARATELY via --system-prompt flag
     and stdin respectively. Prior version concatenated them into a single
     "System instructions:\\n...\\n---\\nuser" prompt — Claude CLI flagged the
     "System:" prefix as a prompt-injection attempt and returned empty/refusal.
+
+    Tools are BLOCKED by default via --disallowedTools. Without this,
+    Claude Code's agent-mode default kicks in and ignores our narrow system
+    prompt (e.g. "extract keywords as JSON") in favor of researching the
+    user problem substantively. With tools blocked, Claude must produce its
+    answer from the prompt alone — which is exactly what structured phases
+    need.
+
+    allow_websearch=True leaves WebSearch enabled for audit phases that
+    want to verify claims against state of the art.
 
     MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env — otherwise
     claude CLI detects nested session and refuses (silent hang).
@@ -84,8 +99,11 @@ def _call_cli(system: str, user: str, model: str | None = None, timeout: int = 3
     child_env.pop("CLAUDECODE", None)
     child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
 
-    args = [_CLAUDE_PATH, "-p", "--system-prompt", system,
-            "--output-format", "text"]
+    blocked = BLOCK_EXCEPT_WEBSEARCH if allow_websearch else ALL_TOOLS_TO_BLOCK
+    args = [_CLAUDE_PATH, "-p",
+            "--system-prompt", system,
+            "--output-format", "text",
+            "--disallowedTools", blocked]
     if model:
         args.extend(["--model", model])
 
@@ -272,7 +290,8 @@ def call_claude(
         )
     elif USE_CLI:
         try:
-            text = _call_cli(system=system, user=user, model=model)
+            text = _call_cli(system=system, user=user, model=model,
+                             allow_websearch=allow_tools)
         except Exception as e:
             import sys as _sys
             _sys.stderr.write(f"[WARN] CLI failed ({model}): {e}; falling back to OpenRouter\n")
@@ -310,7 +329,8 @@ def call_claude(
                 text2 = resp2.content[0].text
             elif USE_CLI:
                 try:
-                    text2 = _call_cli(system=stricter_system, user=user, model=model)
+                    text2 = _call_cli(system=stricter_system, user=user, model=model,
+                                      allow_websearch=allow_tools)
                 except Exception:
                     text2 = _call_openrouter(model, stricter_system, user, max_tokens, 0.0)
             else:
@@ -363,6 +383,7 @@ def websearch(query: str, max_tokens: int = 4000) -> dict:
                     "Then provide the top 3 findings with source URLs and brief summaries. "
                     "Format as plain text with clear URL citations."
                 ),
+                allow_websearch=True,
             )
         except Exception as e:
             import sys as _sys
