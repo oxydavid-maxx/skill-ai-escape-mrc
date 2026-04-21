@@ -68,58 +68,49 @@ USE_CLI = not _api_key and _CLAUDE_PATH is not None and not _FORCE_OPENROUTER
 _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
-def _call_cli(prompt: str, model: str | None = None, timeout: int = 300) -> str:
+def _call_cli(system: str, user: str, model: str | None = None, timeout: int = 300) -> str:
     """Call Claude via CLI subprocess. Uses user's Claude Code subscription.
+
+    IMPORTANT: system and user are passed SEPARATELY via --system-prompt flag
+    and stdin respectively. Prior version concatenated them into a single
+    "System instructions:\\n...\\n---\\nuser" prompt — Claude CLI flagged the
+    "System:" prefix as a prompt-injection attempt and returned empty/refusal.
 
     MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env — otherwise
     claude CLI detects nested session and refuses (silent hang).
-    See module docstring.
-
-    Logs stdout/stderr preview on empty output for debugging.
-    Passes --model when provided (user directive: use latest strongest).
     """
     import sys as _sys
     child_env = os.environ.copy()
     child_env.pop("CLAUDECODE", None)
     child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
 
-    args = [_CLAUDE_PATH, "-p", "--output-format", "text"]
+    args = [_CLAUDE_PATH, "-p", "--system-prompt", system,
+            "--output-format", "text"]
     if model:
         args.extend(["--model", model])
 
-    fd, tmp_path = tempfile.mkstemp(suffix=".txt", prefix="eightd_prompt_")
-    os.close(fd)
-    try:
-        Path(tmp_path).write_text(prompt, encoding="utf-8")
-        with open(tmp_path, "r", encoding="utf-8") as stdin_f:
-            result = subprocess.run(
-                args,
-                stdin=stdin_f,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                encoding="utf-8",
-                errors="replace",
-                shell=False,
-                env=child_env,
-            )
-        if result.returncode != 0:
-            raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:500]}")
-        out = result.stdout.strip()
-        if not out:
-            # Log diagnostic info on empty output
-            _sys.stderr.write(
-                f"[WARN] claude CLI returned empty stdout. "
-                f"rc={result.returncode} stderr_preview={result.stderr[:300]!r} "
-                f"prompt_preview={prompt[:100]!r}\n"
-            )
-            raise RuntimeError("claude CLI returned empty stdout")
-        return out
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except Exception:
-            pass
+    result = subprocess.run(
+        args,
+        input=user,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        encoding="utf-8",
+        errors="replace",
+        shell=False,
+        env=child_env,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:500]}")
+    out = result.stdout.strip()
+    if not out:
+        _sys.stderr.write(
+            f"[WARN] claude CLI returned empty stdout. "
+            f"rc={result.returncode} stderr_preview={result.stderr[:300]!r} "
+            f"system_preview={system[:100]!r} user_preview={user[:100]!r}\n"
+        )
+        raise RuntimeError("claude CLI returned empty stdout")
+    return out
 
 
 def _call_openrouter_websearch(query: str, max_tokens: int) -> str:
@@ -280,9 +271,8 @@ def call_claude(
             allow_tools=allow_tools,
         )
     elif USE_CLI:
-        prompt = f"System instructions:\n{system}\n\n---\n\n{user}"
         try:
-            text = _call_cli(prompt, model=model)
+            text = _call_cli(system=system, user=user, model=model)
         except Exception as e:
             import sys as _sys
             _sys.stderr.write(f"[WARN] CLI failed ({model}): {e}; falling back to OpenRouter\n")
@@ -319,9 +309,8 @@ def call_claude(
                 )
                 text2 = resp2.content[0].text
             elif USE_CLI:
-                prompt2 = f"System instructions:\n{stricter_system}\n\n---\n\n{user}"
                 try:
-                    text2 = _call_cli(prompt2, model=model)
+                    text2 = _call_cli(system=stricter_system, user=user, model=model)
                 except Exception:
                     text2 = _call_openrouter(model, stricter_system, user, max_tokens, 0.0)
             else:
@@ -366,13 +355,15 @@ def websearch(query: str, max_tokens: int = 4000) -> dict:
             if hasattr(block, "text"):
                 text += block.text + "\n"
     elif USE_CLI:
-        prompt = (
-            f"Please use the WebSearch tool to search for: {query}\n\n"
-            "Then provide the top 3 findings with source URLs and brief summaries. "
-            "Format as plain text with clear URL citations."
-        )
         try:
-            text = _call_cli(prompt)
+            text = _call_cli(
+                system="You are a web research assistant. Use the WebSearch tool when asked.",
+                user=(
+                    f"Please use the WebSearch tool to search for: {query}\n\n"
+                    "Then provide the top 3 findings with source URLs and brief summaries. "
+                    "Format as plain text with clear URL citations."
+                ),
+            )
         except Exception as e:
             import sys as _sys
             _sys.stderr.write(f"[WARN] CLI websearch failed: {e}; falling back to OpenRouter :online\n")
