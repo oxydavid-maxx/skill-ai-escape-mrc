@@ -124,3 +124,25 @@ def test_sdk_query_times_out():
             asyncio.run(sdk_client._sdk_query(
                 prompt="p", system_prompt="s", schema=None, timeout_sec=0.1, max_turns=3,
             ))
+
+
+def test_extract_json_bare_object():
+    from eightd.sdk_client import _extract_json
+    assert _extract_json('{"a": 1}') == {"a": 1}
+
+
+def test_extract_json_fenced():
+    from eightd.sdk_client import _extract_json
+    assert _extract_json('```json\n{"a": 1}\n```') == {"a": 1}
+
+
+def test_extract_json_embedded_in_prose():
+    from eightd.sdk_client import _extract_json
+    assert _extract_json('Here is it: {"a": 1} end.') == {"a": 1}
+
+
+def test_extract_json_raises_on_garbage():
+    import json as _j
+    from eightd.sdk_client import _extract_json
+    with pytest.raises(_j.JSONDecodeError):
+        _extract_json("no json here at all")

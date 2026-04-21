@@ -114,3 +114,89 @@ async def _sdk_query(
         return await _collect_messages(query(prompt=prompt, options=options))
 
     return await asyncio.wait_for(_run(), timeout=timeout_sec)
+
+
+def _dump_parse_failure(text: str, context: str = "") -> None:
+    """Save failed text to runs/_parse_failures/ for post-mortem.
+
+    Mirrors anthropic_client.py:_dump_parse_failure. Best-effort only.
+    """
+    try:
+        import datetime
+        dump_dir = Path(__file__).parent.parent / "runs" / "_parse_failures"
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        dump = dump_dir / f"{ts}_{context}.txt"
+        dump.write_text(text, encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _extract_json(text: str):
+    """Robust JSON extraction with multiple fallback strategies.
+
+    Strategies tried in order:
+      1. Bare JSON (standalone object or array)
+      2. Fenced code block (```json ... ``` or plain ```)
+      3. Embedded in prose (outermost balanced braces/brackets)
+
+    Raises json.JSONDecodeError if all strategies fail; also dumps to
+    runs/_parse_failures/ for debugging.
+    """
+    if not text or not text.strip():
+        raise json.JSONDecodeError("empty input", text or "", 0)
+
+    stripped = text.strip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    for pat in (
+        r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```",
+        r"```\s*(\{.*?\}|\[.*?\])\s*```",
+    ):
+        m = re.search(pat, text, re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(1))
+            except json.JSONDecodeError:
+                continue
+
+    for open_ch, close_ch in [("{", "}"), ("[", "]")]:
+        start = text.find(open_ch)
+        while start != -1:
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                ch = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if ch == "\\" and in_string:
+                    escape = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if ch == open_ch:
+                    depth += 1
+                elif ch == close_ch:
+                    depth -= 1
+                    if depth == 0:
+                        candidate = text[start : i + 1]
+                        try:
+                            return json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+            start = text.find(open_ch, start + 1)
+
+    _dump_parse_failure(text, "extract_json_all_strategies_failed")
+    raise json.JSONDecodeError(
+        f"no valid JSON found in text (first 300 chars: {text[:300]!r})",
+        text,
+        0,
+    )
