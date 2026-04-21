@@ -111,6 +111,11 @@ def _call_cli(system: str, user: str, model: str | None = None,
     child_env.pop("CLAUDECODE", None)
     child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
 
+    # Strip trailing whitespace on system prompt — a trailing newline
+    # silently flips claude -p --json-schema out of schema-mode into
+    # prose-mode (reproducible). Belt-and-suspenders alongside load_prompt.
+    system = system.rstrip()
+
     # --setting-sources project: skip loading ~/.claude/CLAUDE.md (which
     # @includes the 5KB wiki index and bloats every call's context). Keep
     # project-level CLAUDE.md so Claude still understands the codebase
