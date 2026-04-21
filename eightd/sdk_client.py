@@ -309,6 +309,7 @@ def websearch(query_text: str, max_tokens: int = 4000) -> dict:
         system_prompt=system_prompt,
         setting_sources=None,
         allowed_tools=["WebSearch"],
+        permission_mode="bypassPermissions",
         max_turns=5,
         env=dict(_SDK_ENV),
     )
