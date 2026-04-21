@@ -267,8 +267,42 @@ def render_report(state: dict, events: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _resend_existing(report_path: Path) -> None:
+    """Read an existing report from disk and re-deliver via send_8d_report_email.
+
+    Skips checkpoint extraction + markdown regeneration. Used after a prior
+    run already produced a report but delivery failed.
+    """
+    if not report_path.exists():
+        raise FileNotFoundError(f"Report not found: {report_path}")
+    report_md = report_path.read_text(encoding="utf-8")
+    # Derive a short problem summary from the first H1 heading
+    first_line = next(
+        (ln for ln in report_md.splitlines() if ln.startswith("# ")),
+        "8D Report",
+    )
+    problem_summary = first_line.lstrip("# ").strip()[:200]
+    print(f"Resending existing report: {report_path} ({report_path.stat().st_size} bytes)")
+    try:
+        log = send_8d_report_email(report_md, report_path, problem_summary)
+        print(f"Email: {log}")
+    except Exception as e:
+        print(f"Email FAIL: {e}")
+        raise
+
+
 def main():
-    if len(sys.argv) < 2:
+    args = sys.argv[1:]
+
+    # --resend <report_path> mode
+    if args and args[0] == "--resend":
+        if len(args) < 2:
+            print("Usage: generate_partial_report.py --resend <report_path>")
+            sys.exit(2)
+        _resend_existing(Path(args[1]))
+        return
+
+    if not args:
         # Auto-detect latest run
         runs_dir = Path(r"D:/D-claude/skills/skill-8d-mrc/runs")
         latest = max(
@@ -277,7 +311,7 @@ def main():
         )
         run_dir = latest
     else:
-        run_dir = Path(sys.argv[1])
+        run_dir = Path(args[0])
 
     print(f"Using run: {run_dir}")
     state = extract_state(run_dir)
