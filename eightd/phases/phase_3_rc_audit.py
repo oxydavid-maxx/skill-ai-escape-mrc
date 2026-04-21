@@ -9,7 +9,7 @@ web_search tool) — it uses that directly during a round when it wants to
 benchmark a claim, instead of us pre-baking batched SoA results.
 """
 import json
-from eightd.anthropic_client import call_claude
+from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
 from eightd import schemas

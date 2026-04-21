@@ -4,7 +4,7 @@ Only audits Q3 (MRC-NC) and Q4 (MRC-ND) preventions — there are no
 prevention actions for Q1/Q2 (those are corrective-only quadrants).
 """
 import json
-from eightd.anthropic_client import call_claude
+from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
 from eightd import schemas

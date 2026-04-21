@@ -5,7 +5,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from eightd.anthropic_client import call_claude
+from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt, sluggify
 from eightd.delivery.email import send_8d_report_email

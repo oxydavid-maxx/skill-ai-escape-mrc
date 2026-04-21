@@ -1,6 +1,6 @@
 """Phase 1: IS/IS NOT problem definition. Defensive — falls back to stub if LLM fails."""
 import sys
-from eightd.anthropic_client import call_claude
+from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
 from eightd import schemas

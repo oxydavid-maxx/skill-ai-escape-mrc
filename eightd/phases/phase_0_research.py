@@ -6,7 +6,7 @@ whether to search. Python runs the searches; results go into state.
 import glob
 from pathlib import Path
 
-from eightd.anthropic_client import call_claude, websearch
+from eightd.sdk_client import call_claude, websearch
 from eightd.models import model_for_role
 from eightd.parallel import parallel_map
 from eightd.utils import load_prompt, safe_read_text

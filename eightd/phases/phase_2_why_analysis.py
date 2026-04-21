@@ -1,5 +1,5 @@
 """Phase 2: Why analysis — 4 parallel quadrant Why chains, schema-constrained."""
-from eightd.anthropic_client import call_claude
+from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.parallel import parallel_map
 from eightd.utils import load_prompt

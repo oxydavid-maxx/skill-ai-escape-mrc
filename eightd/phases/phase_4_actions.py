@@ -9,7 +9,7 @@ Per SKILL.md:
 Prior version generated prevention for ALL 4 quadrants (8 calls) — wrong.
 """
 import json
-from eightd.anthropic_client import call_claude
+from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.parallel import parallel_run
 from eightd.utils import load_prompt
