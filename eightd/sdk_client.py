@@ -83,3 +83,34 @@ async def _collect_messages(msg_iter) -> dict:
         "is_error": is_error,
         "usage": usage,
     }
+
+
+async def _sdk_query(
+    *,
+    prompt: str,
+    system_prompt: str,
+    schema: dict | None,
+    timeout_sec: int,
+    max_turns: int,
+) -> dict:
+    """Run one SDK query with skill-8d-mrc's standard options.
+
+    Returns the dict produced by `_collect_messages`.
+    Raises asyncio.TimeoutError on timeout.
+    """
+    opts_kwargs: dict[str, Any] = dict(
+        system_prompt=system_prompt,
+        setting_sources=None,
+        allowed_tools=[],
+        max_turns=max_turns,
+        env=dict(_SDK_ENV),
+    )
+    if schema is not None:
+        opts_kwargs["output_format"] = {"type": "json_schema", "schema": schema}
+
+    options = ClaudeAgentOptions(**opts_kwargs)
+
+    async def _run():
+        return await _collect_messages(query(prompt=prompt, options=options))
+
+    return await asyncio.wait_for(_run(), timeout=timeout_sec)
