@@ -1,14 +1,10 @@
-"""Phase 2: Why analysis — 4 parallel quadrant Why chains.
-
-Prior version retried each quadrant up to 3 times if len(whys) < 10. That
-multiplied calls by up to 3x. Trust the LLM once; if a chain is short, the
-audit phase will catch it. The count requirement stays in the prompt.
-"""
+"""Phase 2: Why analysis — 4 parallel quadrant Why chains, schema-constrained."""
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.parallel import parallel_map
 from eightd.utils import load_prompt
 from eightd.state import QUADRANTS
+from eightd import schemas
 
 
 def phase_2_why_analysis(state: dict) -> dict:
@@ -33,7 +29,7 @@ def _run_quadrant(state: dict, quadrant: str) -> dict:
         model=model_for_role("why_analysis"),
         system=load_prompt("why_analysis"),
         user=user_msg,
-        parse_json=True,
+        json_schema=schemas.WHY_ANALYSIS,
         max_tokens=8000,
         purpose=f"why_{quadrant}",
     )

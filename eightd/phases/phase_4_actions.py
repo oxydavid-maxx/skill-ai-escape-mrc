@@ -13,6 +13,7 @@ from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.parallel import parallel_run
 from eightd.utils import load_prompt
+from eightd import schemas
 
 CORRECTIVE_QUADRANTS = ["q1_trc_nc", "q2_trc_nd"]
 PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
@@ -45,7 +46,7 @@ def phase_4_actions(state: dict) -> dict:
             model=model_for_role("corrective_action"),
             system=corrective_prompt,
             user=_build_payload(q),
-            parse_json=True,
+            json_schema=schemas.CORRECTIVE_ACTION,
             purpose=f"corrective_{q}",
         )
 
@@ -54,7 +55,7 @@ def phase_4_actions(state: dict) -> dict:
             model=model_for_role("prevention_action"),
             system=prevention_prompt,
             user=_build_payload(q),
-            parse_json=True,
+            json_schema=schemas.PREVENTION_ACTION,
             purpose=f"prevention_{q}",
         )
 

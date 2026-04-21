@@ -7,6 +7,7 @@ import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
+from eightd import schemas
 
 
 def phase_6_verification(state: dict) -> dict:
@@ -20,7 +21,7 @@ def phase_6_verification(state: dict) -> dict:
         model=model_for_role("proof_of_action"),
         system=load_prompt("proof_of_action"),
         user=payload,
-        parse_json=True,
+        json_schema=schemas.VERIFICATION_PLAN,
         purpose="phase_6_verification_plan",
     )
 

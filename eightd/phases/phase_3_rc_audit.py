@@ -12,6 +12,7 @@ import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
+from eightd import schemas
 
 NUM_ROUNDS = 3
 
@@ -33,7 +34,7 @@ def phase_3_rc_audit(state: dict) -> dict:
             model=model_for_role("rc_audit"),
             system=system,
             user=user_msg,
-            parse_json=True,
+            json_schema=schemas.RC_AUDIT,
             purpose=f"phase_3_rc_audit_round_{round_num}",
             allow_tools=True,
         )

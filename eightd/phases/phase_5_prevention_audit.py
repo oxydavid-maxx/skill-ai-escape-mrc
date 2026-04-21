@@ -7,6 +7,7 @@ import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
+from eightd import schemas
 
 NUM_ROUNDS = 3
 PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
@@ -33,7 +34,7 @@ def phase_5_prevention_audit(state: dict) -> dict:
             model=model_for_role("prevention_audit"),
             system=system,
             user=user_msg,
-            parse_json=True,
+            json_schema=schemas.PREVENTION_AUDIT,
             purpose=f"phase_5_prevention_audit_round_{round_num}",
             allow_tools=True,
         )

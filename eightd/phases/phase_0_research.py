@@ -10,6 +10,7 @@ from eightd.anthropic_client import call_claude, websearch
 from eightd.models import model_for_role
 from eightd.parallel import parallel_map
 from eightd.utils import load_prompt, safe_read_text
+from eightd import schemas
 
 WIKI_INDEX_PATH = Path("D:/D-claude/personal-wiki/wiki/index.md")
 WIKI_CONCEPTS_DIR = Path("D:/D-claude/personal-wiki/wiki/concepts")
@@ -27,21 +28,24 @@ PROMINENT_SITES = [
 def phase_0_research(state: dict) -> dict:
     problem = state["problem"]
 
-    # 0a: Problem-specific keywords + searches
-    keywords = call_claude(
+    # 0a: Problem-specific keywords (schema-constrained)
+    kw_result = call_claude(
         model=model_for_role("keyword_extraction"),
         system=load_prompt("keyword_extraction"),
         user=problem,
-        parse_json=True,
+        json_schema=schemas.KEYWORD_EXTRACTION,
+        purpose="keyword_extraction",
     )
+    keywords = kw_result["keywords"]
     kw_str = " ".join(keywords)
 
-    # 0b: Meta categorization
+    # 0b: Meta categorization (schema-constrained)
     meta = call_claude(
         model=model_for_role("meta_categorization"),
         system=load_prompt("meta_categorization"),
         user=problem,
-        parse_json=True,
+        json_schema=schemas.META_CATEGORIZATION,
+        purpose="meta_categorization",
     )
     state["meta_categories"] = meta["categories"]
     state["meta_domains"] = meta["domains"]
@@ -77,19 +81,17 @@ def phase_0_research(state: dict) -> dict:
     state["wiki_pages"] = []
     wiki_index_text = safe_read_text(WIKI_INDEX_PATH)
     if wiki_index_text:
-        relevant_slugs = call_claude(
+        slug_result = call_claude(
             model=model_for_role("simple_classification"),
             system=(
-                "You are a slug-matching function. DO NOT research, DO NOT "
-                "use tools, DO NOT explain. "
-                "Given a wiki index and a problem, output a JSON array of "
-                "up to 5 slug strings from the index most relevant to the "
-                "problem. Start with [ and end with ]. Nothing else."
+                "Pick up to 5 slug strings from the wiki index most relevant "
+                "to the problem. Slugs must appear in the index verbatim."
             ),
             user=f"Index:\n{wiki_index_text}\n\nProblem:\n{problem}",
-            parse_json=True,
+            json_schema=schemas.WIKI_SLUG_SELECTION,
             purpose="wiki_slug_selection",
         )
+        relevant_slugs = slug_result["slugs"]
         for slug in relevant_slugs[:5]:
             page_path = WIKI_CONCEPTS_DIR / f"{slug}.md"
             content = safe_read_text(page_path)
