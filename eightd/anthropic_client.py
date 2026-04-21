@@ -111,15 +111,29 @@ def _call_cli(system: str, user: str, model: str | None = None,
     child_env.pop("CLAUDECODE", None)
     child_env.pop("CLAUDE_CODE_ENTRYPOINT", None)
 
-    blocked = BLOCK_EXCEPT_WEBSEARCH if allow_websearch else ALL_TOOLS_TO_BLOCK
+    # --setting-sources project: skip loading ~/.claude/CLAUDE.md (which
+    # @includes the 5KB wiki index and bloats every call's context). Keep
+    # project-level CLAUDE.md so Claude still understands the codebase
+    # conventions. Empirical speedup: ~140s → ~38s per call.
     args = [_CLAUDE_PATH, "-p",
             "--system-prompt", system,
-            "--disallowedTools", *blocked]
+            "--setting-sources", "project"]
     if json_schema is not None:
+        # Schema mode: the CLI's internal "StructuredOutput" tool is what
+        # emits schema-conformant output. Whitelist it (plus WebSearch if
+        # the audit phase wants it) so Claude doesn't Task/Read/Bash for
+        # open-ended research.
+        allowed = ["StructuredOutput"]
+        if allow_websearch:
+            allowed.append("WebSearch")
         args.extend(["--output-format", "json",
-                     "--json-schema", json.dumps(json_schema)])
+                     "--json-schema", json.dumps(json_schema),
+                     "--allowedTools", *allowed])
     else:
-        args.extend(["--output-format", "text"])
+        # Text mode: block all non-whitelisted tools.
+        blocked = BLOCK_EXCEPT_WEBSEARCH if allow_websearch else ALL_TOOLS_TO_BLOCK
+        args.extend(["--output-format", "text",
+                     "--disallowedTools", *blocked])
     if model:
         args.extend(["--model", model])
 
