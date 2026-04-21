@@ -43,6 +43,15 @@ def phase_5_prevention_audit(state: dict) -> dict:
             import sys
             sys.stderr.write(f"[WARN] phase_5 round {round_num} failed: {str(e)[:150]}; skipping round\n")
             audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
+        if isinstance(audit, list):
+            if len(audit) == 1 and isinstance(audit[0], dict):
+                audit = audit[0]
+            else:
+                audit = {"round": round_num, "weaknesses": audit, "verdict": "EXHAUSTED",
+                         "_normalized_from_list": True}
+        if not isinstance(audit, dict):
+            audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED",
+                     "_fallback": True}
         state["phase_5_rounds"].append(audit)
 
         _apply_fixes(state["prevention_actions"], audit)

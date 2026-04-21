@@ -43,6 +43,17 @@ def phase_3_rc_audit(state: dict) -> dict:
             import sys
             sys.stderr.write(f"[WARN] phase_3 round {round_num} failed: {str(e)[:150]}; skipping round\n")
             audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
+        # Normalize: LLM sometimes returns a bare list of weaknesses or list-wrapped
+        # dict; coerce to dict shape so downstream .get works.
+        if isinstance(audit, list):
+            if len(audit) == 1 and isinstance(audit[0], dict):
+                audit = audit[0]
+            else:
+                audit = {"round": round_num, "weaknesses": audit, "verdict": "EXHAUSTED",
+                         "_normalized_from_list": True}
+        if not isinstance(audit, dict):
+            audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED",
+                     "_fallback": True}
         state["phase_3_rounds"].append(audit)
 
         # Apply ADDRESSABLE fixes to the why_chains in-place so round N+1
