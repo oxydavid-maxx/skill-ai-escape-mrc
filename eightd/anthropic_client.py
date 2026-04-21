@@ -68,31 +68,43 @@ USE_CLI = not _api_key and _CLAUDE_PATH is not None and not _FORCE_OPENROUTER
 _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
-ALL_TOOLS_TO_BLOCK = "Task Bash Edit Read Write WebSearch WebFetch Grep Glob NotebookEdit"
-BLOCK_EXCEPT_WEBSEARCH = "Task Bash Edit Read Write WebFetch Grep Glob NotebookEdit"
+ALL_TOOLS_TO_BLOCK = [
+    "Task", "Bash", "Edit", "Read", "Write",
+    "WebSearch", "WebFetch", "Grep", "Glob", "NotebookEdit",
+]
+BLOCK_EXCEPT_WEBSEARCH = [
+    "Task", "Bash", "Edit", "Read", "Write",
+    "WebFetch", "Grep", "Glob", "NotebookEdit",
+]
 
 
 def _call_cli(system: str, user: str, model: str | None = None,
-              timeout: int = 300, allow_websearch: bool = False) -> str:
+              timeout: int = 300, allow_websearch: bool = False,
+              json_schema: dict | None = None):
     """Call Claude via CLI subprocess. Uses user's Claude Code subscription.
 
-    IMPORTANT: system and user are passed SEPARATELY via --system-prompt flag
-    and stdin respectively. Prior version concatenated them into a single
-    "System instructions:\\n...\\n---\\nuser" prompt — Claude CLI flagged the
-    "System:" prefix as a prompt-injection attempt and returned empty/refusal.
+    Two modes:
+
+    1. Text mode (json_schema=None): returns str.
+       Uses --output-format text. Claude returns whatever it writes.
+       Use for report generation, free-form content.
+
+    2. Structured mode (json_schema != None): returns parsed dict.
+       Uses --output-format json + --json-schema <schema>.
+       Claude CLI uses constrained decoding — output is guaranteed to match
+       the schema. Parses the multi-message array stdout and returns the
+       `structured_output` field of the result message.
+       This is the 2026 best practice per https://claudelog.com/faqs/what-
+       is-output-format-in-claude-code/ — no parse retry, no prompt gymnastics.
+
+    IMPORTANT: system and user are passed SEPARATELY via --system-prompt
+    flag and stdin. Concatenated prompts trigger "System:" injection guard.
 
     Tools are BLOCKED by default via --disallowedTools. Without this,
-    Claude Code's agent-mode default kicks in and ignores our narrow system
-    prompt (e.g. "extract keywords as JSON") in favor of researching the
-    user problem substantively. With tools blocked, Claude must produce its
-    answer from the prompt alone — which is exactly what structured phases
-    need.
+    Claude's agent-mode default ignores narrow system prompts in favor of
+    researching the user problem substantively.
 
-    allow_websearch=True leaves WebSearch enabled for audit phases that
-    want to verify claims against state of the art.
-
-    MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env — otherwise
-    claude CLI detects nested session and refuses (silent hang).
+    MUST strip CLAUDECODE + CLAUDE_CODE_ENTRYPOINT from child env.
     """
     import sys as _sys
     child_env = os.environ.copy()
@@ -102,8 +114,12 @@ def _call_cli(system: str, user: str, model: str | None = None,
     blocked = BLOCK_EXCEPT_WEBSEARCH if allow_websearch else ALL_TOOLS_TO_BLOCK
     args = [_CLAUDE_PATH, "-p",
             "--system-prompt", system,
-            "--output-format", "text",
-            "--disallowedTools", blocked]
+            "--disallowedTools", *blocked]
+    if json_schema is not None:
+        args.extend(["--output-format", "json",
+                     "--json-schema", json.dumps(json_schema)])
+    else:
+        args.extend(["--output-format", "text"])
     if model:
         args.extend(["--model", model])
 
@@ -118,6 +134,40 @@ def _call_cli(system: str, user: str, model: str | None = None,
         shell=False,
         env=child_env,
     )
+
+    if json_schema is not None:
+        # stdout is a JSON array of messages: [init, assistant, result]
+        # Find the result message and return its structured_output field.
+        try:
+            messages = json.loads(result.stdout)
+        except Exception as e:
+            raise RuntimeError(
+                f"claude CLI json-schema mode: stdout not JSON "
+                f"(rc={result.returncode}): {result.stdout[:400]!r}"
+            ) from e
+        if not isinstance(messages, list):
+            raise RuntimeError(
+                f"claude CLI json-schema mode: expected list, got "
+                f"{type(messages).__name__}: {str(messages)[:300]}"
+            )
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("type") == "result":
+                if msg.get("is_error"):
+                    raise RuntimeError(
+                        f"claude CLI returned error result: {msg.get('result', '')[:500]}"
+                    )
+                so = msg.get("structured_output")
+                if so is None:
+                    raise RuntimeError(
+                        f"claude CLI result missing structured_output: {list(msg.keys())}"
+                    )
+                return so
+        raise RuntimeError(
+            f"claude CLI: no result message in output (types: "
+            f"{[m.get('type') for m in messages if isinstance(m, dict)]})"
+        )
+
+    # Text mode
     if result.returncode != 0:
         raise RuntimeError(f"claude CLI failed (rc={result.returncode}): {result.stderr[:500]}")
     out = result.stdout.strip()
@@ -265,16 +315,19 @@ def call_claude(
     temperature: float = 0.3,
     purpose: str = "unknown",
     allow_tools: bool = False,
+    json_schema: dict | None = None,
 ):
     """Call Claude with retry. Priority: direct SDK -> CLI -> OpenRouter.
 
-    allow_tools: when True, grant WebSearch tool access.
-      - CLI path: claude CLI has WebSearch native; prompts can request it.
-      - SDK path: pass tools=[web_search] and handle tool_use loop.
-      - OpenRouter path: ignored (no tool-use in this client).
+    json_schema (preferred when structured output is needed): pass a JSON
+    schema object. CLI uses constrained decoding (--json-schema) so the
+    returned value is GUARANTEED to match the schema. No parse retries.
+    The function returns the parsed object, not a string.
 
-    Emits progress events if eightd.progress is initialized.
-    On JSON parse failure, retries ONCE with a stricter prompt.
+    parse_json=True (legacy): ask for JSON in prompt, best-effort parse.
+    Retained for prompts not yet converted to schema.
+
+    allow_tools: WebSearch available to the model.
     """
     # Progress: emit start event
     try:
@@ -282,6 +335,28 @@ def call_claude(
         _p.emit("llm", "llm_call_start", {"purpose": purpose, "prompt_len": len(user)}, model=model)
     except Exception:
         pass
+    # Schema-constrained path: returns parsed object directly, no text stage.
+    if json_schema is not None:
+        if USE_CLI:
+            try:
+                result = _call_cli(system=system, user=user, model=model,
+                                   allow_websearch=allow_tools,
+                                   json_schema=json_schema)
+                try:
+                    from eightd import progress as _p
+                    _p.emit("llm", "llm_call_end",
+                            {"purpose": purpose, "text_len": len(json.dumps(result))},
+                            model=model)
+                except Exception:
+                    pass
+                return result
+            except Exception as e:
+                import sys as _sys
+                _sys.stderr.write(f"[WARN] CLI schema-mode failed ({model}): {e}; falling back to text-mode\n")
+                # Fall through to text mode with schema hint in system
+                system = system + f"\n\nOutput must match this JSON schema:\n{json.dumps(json_schema)}"
+        # If no CLI or CLI failed, continue with text parsing as fallback
+
     if _client is not None:
         text = _sdk_call_with_optional_tools(
             model=model, system=system, user=user,
