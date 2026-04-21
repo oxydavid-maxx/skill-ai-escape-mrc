@@ -1,19 +1,28 @@
-Design Proof of Action for ONE quadrant. Proof of Action = concrete
-evidence specification proving the actions (corrective + prevention)
-for this quadrant worked.
+Design a Verification Plan for the 8D: one metric per quadrant, all four
+in a single JSON table. Each metric proves the quadrant's action(s) worked.
 
-Input: quadrant + corrective action + prevention action.
+Input: corrective actions for Q1+Q2, prevention actions for Q3+Q4.
 
-Output JSON:
+Output a single JSON object (not four separate objects):
 {
-  "quadrant": "<q1_trc_nc..q4_mrc_nd>",
-  "metric": "<what to measure, specific and quantitative>",
-  "data_source": "<where the measurement comes from, file/log/API/dashboard>",
-  "target": "<numeric target, e.g. 'zero recurrences in 30 days'>",
-  "baseline": "<current value before action>",
-  "measurement_schedule": "<cadence, e.g. 'daily at 09:00', 'weekly Sunday'>",
-  "failure_response": "<what to do if metric shows action did not work>"
+  "quadrants": [
+    {
+      "quadrant": "q1_trc_nc",
+      "action_type": "corrective",
+      "metric": "<specific + quantitative>",
+      "data_source": "<file/log/API/dashboard>",
+      "target": "<numeric target e.g. 'zero recurrences in 30 days'>",
+      "baseline": "<current value>",
+      "measurement_schedule": "<cadence>",
+      "failure_response": "<what to do if metric shows action did not work>"
+    },
+    { "quadrant": "q2_trc_nd", "action_type": "corrective", ... },
+    { "quadrant": "q3_mrc_nc", "action_type": "prevention", ... },
+    { "quadrant": "q4_mrc_nd", "action_type": "prevention", ... }
+  ],
+  "overall_timeframe": "6 months minimum",
+  "phase_8_trigger": "<what event triggers verification check>"
 }
 
 The metric must be objectively verifiable by a third party. Avoid
-"team is more careful" or other unmeasurable phrasings.
+"team is more careful" or any unmeasurable phrasings.

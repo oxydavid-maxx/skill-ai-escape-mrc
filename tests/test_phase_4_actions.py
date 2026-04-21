@@ -1,93 +1,110 @@
+"""Phase 4 — 2 corrective (Q1,Q2) + 2 prevention (Q3,Q4) = 4 parallel calls."""
 from unittest.mock import patch
-from eightd.phases.phase_4_actions import phase_4_actions, _normalize_action_dict
-from eightd.state import QUADRANTS
+from eightd.phases.phase_4_actions import (
+    phase_4_actions, _normalize_action_dict,
+    CORRECTIVE_QUADRANTS, PREVENTION_QUADRANTS,
+)
 
 
-def test_phase_4_produces_both_corrective_and_prevention_per_quadrant():
-    state = {
+def _base_state():
+    all_q = CORRECTIVE_QUADRANTS + PREVENTION_QUADRANTS
+    return {
         "problem": "p",
-        "why_chains": {q: {"whys": [], "root": "r"} for q in QUADRANTS},
+        "why_chains": {q: {"whys": [], "root": "r"} for q in all_q},
     }
 
-    def fake_call(model, system, user, parse_json=False, **kw):
-        if "corrective" in system.lower():
-            return {"quadrant": "x", "action": "fix this instance", "rationale": "..."}
-        return {"quadrant": "x", "action": "prevent class", "gate_test": {"scope": "PASS"}, "hierarchy_level": 2}
 
-    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake_call):
-        result = phase_4_actions(state)
+def test_phase_4_corrective_only_for_q1_q2():
+    def fake(**kw):
+        if "corrective" in kw["system"].lower():
+            return {"action": "fix", "rationale": "..."}
+        return {"action": "prevent", "gate_test": {"scope": "PASS"}}
 
-    assert set(result["corrective_actions"].keys()) == set(QUADRANTS)
-    assert set(result["prevention_actions"].keys()) == set(QUADRANTS)
-    assert result["phase_4_complete"] is True
+    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake):
+        result = phase_4_actions(_base_state())
+
+    assert set(result["corrective_actions"].keys()) == {"q1_trc_nc", "q2_trc_nd"}
+    assert "q3_mrc_nc" not in result["corrective_actions"]
+    assert "q4_mrc_nd" not in result["corrective_actions"]
+
+
+def test_phase_4_prevention_only_for_q3_q4():
+    def fake(**kw):
+        if "corrective" in kw["system"].lower():
+            return {"action": "fix"}
+        return {"action": "prevent"}
+
+    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake):
+        result = phase_4_actions(_base_state())
+
+    assert set(result["prevention_actions"].keys()) == {"q3_mrc_nc", "q4_mrc_nd"}
+    assert "q1_trc_nc" not in result["prevention_actions"]
+    assert "q2_trc_nd" not in result["prevention_actions"]
+
+
+def test_phase_4_makes_exactly_4_calls():
+    """Not 8 (prior bug). Corrective x 2 + Prevention x 2."""
+    call_count = {"n": 0}
+
+    def fake(**kw):
+        call_count["n"] += 1
+        return {"action": "x"}
+
+    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake):
+        phase_4_actions(_base_state())
+
+    assert call_count["n"] == 4
 
 
 def test_phase_4_unwraps_list_wrapped_dict():
-    """LLM sometimes returns [{...}] instead of {...}; normalizer unwraps it."""
-    state = {
-        "problem": "p",
-        "why_chains": {q: {"whys": [], "root": "r"} for q in QUADRANTS},
-    }
-    wrapped = [{"quadrant": "q3_mrc_nc", "action": "wrapped dict"}]
-
+    wrapped = [{"action": "wrapped"}]
     with patch("eightd.phases.phase_4_actions.call_claude", return_value=wrapped):
-        result = phase_4_actions(state)
-
-    for q in QUADRANTS:
-        pa = result["prevention_actions"][q]
-        assert isinstance(pa, dict), f"{q}: expected dict, got {type(pa)}"
-        assert pa.get("action") == "wrapped dict"
+        result = phase_4_actions(_base_state())
+    for q in CORRECTIVE_QUADRANTS:
+        assert result["corrective_actions"][q] == {"action": "wrapped"}
+    for q in PREVENTION_QUADRANTS:
+        assert result["prevention_actions"][q] == {"action": "wrapped"}
 
 
 def test_phase_4_handles_unparseable_shape():
-    """If LLM returns a string/number, wrap it so audit phase can still iterate."""
-    state = {
-        "problem": "p",
-        "why_chains": {q: {"whys": [], "root": "r"} for q in QUADRANTS},
-    }
-
-    with patch("eightd.phases.phase_4_actions.call_claude", return_value="bare string output"):
-        result = phase_4_actions(state)
-
-    for q in QUADRANTS:
-        pa = result["prevention_actions"][q]
-        assert isinstance(pa, dict)
-        assert "_parse_warning" in pa
-        assert "bare string output" in pa["action"]
+    with patch("eightd.phases.phase_4_actions.call_claude", return_value="bare string"):
+        result = phase_4_actions(_base_state())
+    for q in CORRECTIVE_QUADRANTS:
+        assert "_parse_warning" in result["corrective_actions"][q]
+    for q in PREVENTION_QUADRANTS:
+        assert "_parse_warning" in result["prevention_actions"][q]
 
 
 def test_normalize_action_dict_unit():
     assert _normalize_action_dict({"a": 1}) == {"a": 1}
     assert _normalize_action_dict([{"a": 1}]) == {"a": 1}
-    # Multi-element list: fall through to wrap
     multi = _normalize_action_dict([{"a": 1}, {"b": 2}])
     assert "_parse_warning" in multi
-    # String: wrap with truncated action
     s = _normalize_action_dict("hello")
     assert s == {"action": "hello", "_parse_warning": "expected dict, got str"}
 
 
 def test_phase_5_audit_skips_non_dict_prevention_action():
-    """Phase 5 audit must not crash when prevention_actions[q] is a list
-    (e.g., checkpoint from an older run before normalization was added)."""
     from eightd.phases.phase_5_prevention_audit import phase_5_prevention_audit
     state = {
-        "prevention_actions": {q: [{"action": "a"}] for q in QUADRANTS},  # list shape
-        "phase_5_soa_research": [],
-        "phase_5_attempt_count": 0,
+        "prevention_actions": {
+            "q3_mrc_nc": [{"action": "a"}],  # list shape (from older checkpoint)
+            "q4_mrc_nd": [{"action": "b"}],
+        },
     }
 
-    def fake_call(model, system, user, parse_json=False, **kw):
+    def fake(**kw):
         return {
+            "round": 1,
             "verdict": "EXHAUSTED",
             "weaknesses": [
-                {"quadrant": "q1_trc_nc", "suggested_fix": "tighten metric"},
+                {"quadrant": "q3_mrc_nc", "classification": "ADDRESSABLE",
+                 "suggested_fix": "tighten"},
             ],
-            "soa_citations_used": ["https://example.com"],
         }
 
-    with patch("eightd.phases.phase_5_prevention_audit.call_claude", side_effect=fake_call):
-        # Should not raise AttributeError even though prevention_actions[q] is a list.
+    with patch("eightd.phases.phase_5_prevention_audit.call_claude", side_effect=fake):
         result = phase_5_prevention_audit(state)
 
+    # Should not crash even with list-shaped prevention_actions.
     assert result["phase_5_complete"] is True

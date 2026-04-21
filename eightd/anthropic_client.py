@@ -192,6 +192,38 @@ def _translate_model_for_openrouter(model: str) -> str:
     return "anthropic/claude-sonnet-4"  # default
 
 
+def _sdk_call_with_optional_tools(model, system, user, max_tokens, temperature, allow_tools):
+    """SDK path: supports tool-use loop when allow_tools=True.
+
+    Anthropic's built-in web_search tool is server-side — we pass the tool
+    definition and the API returns text directly. No client-side loop needed
+    (server handles search internally and returns final text).
+    """
+    tools = None
+    if allow_tools:
+        tools = [{
+            "type": "web_search_20250305",
+            "name": "web_search",
+            "max_uses": 3,
+        }]
+    kwargs = dict(
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    )
+    if tools is not None:
+        kwargs["tools"] = tools
+    resp = _client.messages.create(**kwargs)
+    # Collect all text blocks (tool_use blocks are server-resolved)
+    text_parts = []
+    for block in resp.content:
+        if hasattr(block, "text") and block.text:
+            text_parts.append(block.text)
+    return "\n".join(text_parts) if text_parts else ""
+
+
 def _should_retry(retry_state):
     """Retry on network/API errors, NOT on JSON parse errors.
 
@@ -218,12 +250,17 @@ def call_claude(
     max_tokens: int = 8000,
     temperature: float = 0.3,
     purpose: str = "unknown",
+    allow_tools: bool = False,
 ):
     """Call Claude with retry. Priority: direct SDK -> CLI -> OpenRouter.
 
+    allow_tools: when True, grant WebSearch tool access.
+      - CLI path: claude CLI has WebSearch native; prompts can request it.
+      - SDK path: pass tools=[web_search] and handle tool_use loop.
+      - OpenRouter path: ignored (no tool-use in this client).
+
     Emits progress events if eightd.progress is initialized.
-    On JSON parse failure, retries ONCE with a stricter prompt (not via
-    tenacity, which retries the identical prompt).
+    On JSON parse failure, retries ONCE with a stricter prompt.
     """
     # Progress: emit start event
     try:
@@ -232,25 +269,20 @@ def call_claude(
     except Exception:
         pass
     if _client is not None:
-        resp = _client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            system=system,
-            messages=[{"role": "user", "content": user}],
+        text = _sdk_call_with_optional_tools(
+            model=model, system=system, user=user,
+            max_tokens=max_tokens, temperature=temperature,
+            allow_tools=allow_tools,
         )
-        text = resp.content[0].text
     elif USE_CLI:
         prompt = f"System instructions:\n{system}\n\n---\n\n{user}"
         try:
             text = _call_cli(prompt, model=model)
         except Exception as e:
-            # CLI failed — fall back to OpenRouter if available
             import sys as _sys
             _sys.stderr.write(f"[WARN] CLI failed ({model}): {e}; falling back to OpenRouter\n")
             text = _call_openrouter(model, system, user, max_tokens, temperature)
     else:
-        # No CLI — try OpenRouter directly
         text = _call_openrouter(model, system, user, max_tokens, temperature)
     # Progress: emit end event
     try:

@@ -1,87 +1,66 @@
-"""Phase 5b: Prevention audit with SoA citation requirement + loop cap."""
+"""Phase 5: Prevention audit — 3 sequential rounds, no outer loop.
+
+Only audits Q3 (MRC-NC) and Q4 (MRC-ND) preventions — there are no
+prevention actions for Q1/Q2 (those are corrective-only quadrants).
+"""
 import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt
-from eightd.phases.phase_3_rc_audit import (
-    _format_soa, _extract_urls, _cites_soa_lenient, MAX_OUTER_ATTEMPTS,
-)
+
+NUM_ROUNDS = 3
+PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
 
 
 def phase_5_prevention_audit(state: dict) -> dict:
     system = load_prompt("prevention_audit")
-    soa_context = _format_soa(state.get("phase_5_soa_research", []))
-    soa_urls = _extract_urls(state.get("phase_5_soa_research", []))
-
     state.setdefault("phase_5_rounds", [])
-    attempt = state.get("phase_5_attempt_count", 0) + 1
-    state["phase_5_attempt_count"] = attempt
-    force_accept = attempt >= MAX_OUTER_ATTEMPTS
+    residual = []
 
-    for round_num in range(1, 4):
+    preventions = {
+        q: state["prevention_actions"].get(q, {})
+        for q in PREVENTION_QUADRANTS
+    }
+
+    for round_num in range(1, NUM_ROUNDS + 1):
         user_msg = (
-            f"Round: {round_num}\n\n"
-            f"Prevention actions:\n"
-            f"{json.dumps(state['prevention_actions'], ensure_ascii=False)[:5000]}\n\n"
-            f"Phase 5a SoA research:\n{soa_context}"
+            f"Round {round_num} of {NUM_ROUNDS}.\n\n"
+            f"Prevention actions (Q3, Q4 only):\n"
+            f"{json.dumps(preventions, ensure_ascii=False)[:5000]}\n\n"
+            "Use WebSearch if you want to benchmark against state-of-the-art."
         )
         audit = call_claude(
             model=model_for_role("prevention_audit"),
             system=system,
             user=user_msg,
             parse_json=True,
-            purpose=f"phase_5_prevention_audit_round_{round_num}_attempt_{attempt}",
+            purpose=f"phase_5_prevention_audit_round_{round_num}",
+            allow_tools=True,
         )
         state["phase_5_rounds"].append(audit)
 
-        verdict = audit.get("verdict")
-        citation_ok = _cites_soa_lenient(audit, soa_urls, min_citations=1)
-        audit["_citation_check"] = "ok" if citation_ok else "weak"
+        _apply_fixes(state["prevention_actions"], audit)
 
-        if verdict == "EXHAUSTED":
-            if citation_ok or force_accept:
-                state["phase_5_verdict"] = "EXHAUSTED"
-                state["phase_5_complete"] = True
-                if not citation_ok:
-                    audit["_force_accepted_reason"] = (
-                        f"force-accepted after {attempt} outer attempts"
-                    )
-                return state
-            audit["rejection_reason"] = "verdict_EXHAUSTED_without_any_soa_citation"
-            continue
-        if verdict == "REWORK":
-            if force_accept:
-                state["phase_5_verdict"] = "EXHAUSTED"
-                state["phase_5_complete"] = True
-                audit["_force_accepted_reason"] = (
-                    f"REWORK overridden on attempt {attempt}/{MAX_OUTER_ATTEMPTS}"
-                )
-                return state
-            state["phase_5_verdict"] = "REWORK"
-            state["phase_5_complete"] = False
-            return state
-        for w in audit.get("weaknesses", []):
-            q = w.get("quadrant")
-            if q in state["prevention_actions"]:
-                pa = state["prevention_actions"][q]
-                # phase_4 normalizes to dict, but guard here in case of
-                # checkpoint resume from an older run that saved a list shape.
-                if isinstance(pa, dict):
-                    pa.setdefault("audit_notes", []).append(
-                        w.get("suggested_fix", "")
-                    )
+        for w in audit.get("weaknesses", []) or []:
+            if isinstance(w, dict) and w.get("classification") == "RESIDUAL":
+                residual.append(w)
 
-    if force_accept:
-        state["phase_5_verdict"] = "EXHAUSTED"
-        state["phase_5_complete"] = True
-    else:
-        state["phase_5_verdict"] = "REWORK"
-        state["phase_5_complete"] = False
+        if audit.get("verdict") == "EXHAUSTED":
+            break
+
+    state["phase_5_residual_risks"] = residual
+    state["phase_5_verdict"] = "EXHAUSTED"
+    state["phase_5_complete"] = True
     return state
 
 
-def route_from_phase_5(state: dict) -> str:
-    if state.get("phase_5_verdict") == "REWORK":
-        state["phase_4_complete"] = False
-        return "phase_4_actions"
-    return "phase_6_verification"
+def _apply_fixes(prevention_actions: dict, audit: dict) -> None:
+    for w in audit.get("weaknesses", []) or []:
+        if not isinstance(w, dict) or w.get("classification") != "ADDRESSABLE":
+            continue
+        q = w.get("quadrant")
+        if q not in prevention_actions:
+            continue
+        pa = prevention_actions[q]
+        if isinstance(pa, dict):
+            pa.setdefault("audit_notes", []).append(w.get("suggested_fix", ""))

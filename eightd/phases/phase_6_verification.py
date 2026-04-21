@@ -1,46 +1,38 @@
-"""Phase 6: Verification plan + Proof of Action 4-quadrant matrix."""
+"""Phase 6: Single verification plan call — 4 quadrant metrics in one output.
+
+Prior version made 4 separate LLM calls (one per quadrant). SKILL.md asks
+for ONE verification plan with a table of metrics. Consolidated.
+"""
 import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
-from eightd.parallel import parallel_map
 from eightd.utils import load_prompt
-from eightd.state import QUADRANTS
-
-
-def _safe_dict(v):
-    """Coerce to dict for payload rendering; tolerate list-wrapped or other shapes."""
-    if isinstance(v, dict):
-        return v
-    if isinstance(v, list) and len(v) == 1 and isinstance(v[0], dict):
-        return v[0]
-    return {"action": str(v)[:500]} if v else {}
 
 
 def phase_6_verification(state: dict) -> dict:
-    proof_prompt = load_prompt("proof_of_action")
+    payload = json.dumps({
+        "corrective_actions": state.get("corrective_actions", {}),
+        "prevention_actions": state.get("prevention_actions", {}),
+        "problem": state.get("problem", ""),
+    }, ensure_ascii=False)
 
-    def _proof_for(quadrant: str):
-        payload = json.dumps({
-            "quadrant": quadrant,
-            "corrective": _safe_dict(state["corrective_actions"].get(quadrant, {})),
-            "prevention": _safe_dict(state["prevention_actions"].get(quadrant, {})),
-        }, ensure_ascii=False)
-        return quadrant, call_claude(
-            model=model_for_role("proof_of_action"),
-            system=proof_prompt,
-            user=payload,
-            parse_json=True,
-        )
+    plan = call_claude(
+        model=model_for_role("proof_of_action"),
+        system=load_prompt("proof_of_action"),
+        user=payload,
+        parse_json=True,
+        purpose="phase_6_verification_plan",
+    )
 
-    # 4 quadrants → parallel fan-out.
-    results = parallel_map(_proof_for, QUADRANTS, max_workers=4)
-    state["proof_of_action"] = {q: p for q, p in results}
+    state["verification_plan"] = plan
 
-    state["verification_plan"] = {
-        "metrics": [state["proof_of_action"][q].get("metric") for q in QUADRANTS if isinstance(state["proof_of_action"][q], dict)],
-        "data_sources": [state["proof_of_action"][q].get("data_source") for q in QUADRANTS if isinstance(state["proof_of_action"][q], dict)],
-        "timeframe_default": "6 months",
-        "failure_response_default": "re-open 8D for the affected quadrant",
-    }
+    # Backward-compat: old closure audit expects proof_of_action keyed by quadrant.
+    # Re-expose the table that way for any downstream consumer.
+    per_q = {}
+    for row in plan.get("quadrants", []) or []:
+        if isinstance(row, dict) and row.get("quadrant"):
+            per_q[row["quadrant"]] = row
+    state["proof_of_action"] = per_q
+
     state["phase_6_complete"] = True
     return state

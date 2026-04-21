@@ -62,28 +62,16 @@ def _render_report(state: dict) -> str:
         model=model_for_role("report_generation"),
         system=load_prompt("report_render") + "\n\nTemplate to follow:\n" + template,
         user=json.dumps(_state_summary(state), ensure_ascii=False),
-        max_tokens=16000,
+        max_tokens=8000,
+        purpose="phase_7_report_render",
     )
     return rendered
 
 
 def _state_summary(state: dict) -> dict:
-    # Load progress log if available for timeline section
-    progress_events = []
-    try:
-        run_dir = state.get("run_dir")
-        if run_dir:
-            p_path = Path(run_dir) / "progress.jsonl"
-            if p_path.exists():
-                with open(p_path, encoding="utf-8") as f:
-                    for line in f:
-                        try:
-                            progress_events.append(json.loads(line))
-                        except Exception:
-                            pass
-    except Exception:
-        pass
-
+    """Minimal state summary for report render. Does NOT include progress
+    events (bloats prompt to 30-50K chars for no real value — the report
+    should document decisions, not a replay of JSONL events)."""
     return {
         "problem": state.get("problem"),
         "run_id": state.get("run_id"),
@@ -92,44 +80,38 @@ def _state_summary(state: dict) -> dict:
         "why_chains": state.get("why_chains"),
         "corrective_actions": state.get("corrective_actions"),
         "prevention_actions": state.get("prevention_actions"),
-        "proof_of_action": state.get("proof_of_action"),
         "verification_plan": state.get("verification_plan"),
         "phase_3_rounds": state.get("phase_3_rounds"),
-        "phase_3_soa_research": state.get("phase_3_soa_research"),
         "phase_5_rounds": state.get("phase_5_rounds"),
-        "phase_5_soa_research": state.get("phase_5_soa_research"),
-        "phase_7_soa_research": state.get("phase_7_soa_research"),
-        "soa_urls_deduped": sorted(_collect_soa_urls(state)),
-        "pipeline_timeline": progress_events,
+        "phase_3_residual_risks": state.get("phase_3_residual_risks"),
+        "phase_5_residual_risks": state.get("phase_5_residual_risks"),
         "meta_categories": state.get("meta_categories"),
         "meta_domains": state.get("meta_domains"),
     }
 
 
-def _collect_soa_urls(state: dict) -> set:
-    urls = set()
-    for key in ["phase_3_soa_research", "phase_5_soa_research", "phase_7_soa_research"]:
-        for entry in state.get(key, []):
-            urls.update(URL_RE.findall(entry.get("results", "")))
-    return urls
-
-
 def _run_closure_audit(state: dict) -> dict:
+    """Closure audit matches the new action shape:
+      - Corrective only for Q1+Q2 (TRC)
+      - Prevention only for Q3+Q4 (MRC)
+      - Proof of action covers all 4 quadrants in verification_plan
+    """
     checks = {
         "root_cause_matrix_complete": all(
             q in state.get("why_chains", {}) for q in
             ["q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd"]
         ),
-        "corrective_matrix_complete": all(
+        "corrective_q1_q2_present": all(
             q in state.get("corrective_actions", {}) for q in
-            ["q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd"]
+            ["q1_trc_nc", "q2_trc_nd"]
         ),
-        "proof_matrix_complete": all(
-            q in state.get("proof_of_action", {}) for q in
-            ["q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd"]
+        "prevention_q3_q4_present": all(
+            q in state.get("prevention_actions", {}) for q in
+            ["q3_mrc_nc", "q4_mrc_nd"]
         ),
-        "phase_3_exhausted": state.get("phase_3_verdict") == "EXHAUSTED",
-        "phase_5_exhausted": state.get("phase_5_verdict") == "EXHAUSTED",
+        "verification_plan_present": bool(state.get("verification_plan")),
+        "phase_3_done": state.get("phase_3_complete") is True,
+        "phase_5_done": state.get("phase_5_complete") is True,
     }
     checks["overall_pass"] = all(checks.values())
     return checks

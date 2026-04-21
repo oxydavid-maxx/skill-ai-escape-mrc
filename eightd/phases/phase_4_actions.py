@@ -1,20 +1,24 @@
-"""Phase 4: Corrective + Prevention actions, 4 quadrants each."""
+"""Phase 4: Corrective (Q1+Q2) + Prevention (Q3+Q4) — 4 parallel calls total.
+
+Per SKILL.md:
+  Q1 (TRC-NC) → Corrective
+  Q2 (TRC-ND) → Corrective
+  Q3 (MRC-NC) → Prevention
+  Q4 (MRC-ND) → Prevention
+
+Prior version generated prevention for ALL 4 quadrants (8 calls) — wrong.
+"""
 import json
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
 from eightd.parallel import parallel_run
 from eightd.utils import load_prompt
-from eightd.state import QUADRANTS
+
+CORRECTIVE_QUADRANTS = ["q1_trc_nc", "q2_trc_nd"]
+PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
 
 
 def _normalize_action_dict(v):
-    """Coerce LLM action output into a dict.
-
-    Observed LLM output shapes:
-      - dict  -> pass through
-      - [dict] single-element list -> unwrap
-      - other -> wrap with _parse_warning so audit phase can still iterate
-    """
     if isinstance(v, dict):
         return v
     if isinstance(v, list) and len(v) == 1 and isinstance(v[0], dict):
@@ -29,47 +33,44 @@ def phase_4_actions(state: dict) -> dict:
     corrective_prompt = load_prompt("corrective_action")
     prevention_prompt = load_prompt("prevention_action")
 
-    state["corrective_actions"] = {}
-    state["prevention_actions"] = {}
-
-    def _corrective_for(quadrant: str):
-        payload = json.dumps({
-            "quadrant": quadrant,
-            "root_cause": state["why_chains"].get(quadrant, {}),
+    def _build_payload(q):
+        return json.dumps({
+            "quadrant": q,
+            "root_cause": state["why_chains"].get(q, {}),
             "problem": state["problem"],
         }, ensure_ascii=False)
-        return quadrant, "corrective", call_claude(
+
+    def _corrective(q):
+        return q, call_claude(
             model=model_for_role("corrective_action"),
             system=corrective_prompt,
-            user=payload,
+            user=_build_payload(q),
             parse_json=True,
+            purpose=f"corrective_{q}",
         )
 
-    def _prevention_for(quadrant: str):
-        payload = json.dumps({
-            "quadrant": quadrant,
-            "root_cause": state["why_chains"].get(quadrant, {}),
-            "problem": state["problem"],
-        }, ensure_ascii=False)
-        return quadrant, "prevention", call_claude(
+    def _prevention(q):
+        return q, call_claude(
             model=model_for_role("prevention_action"),
             system=prevention_prompt,
-            user=payload,
+            user=_build_payload(q),
             parse_json=True,
+            purpose=f"prevention_{q}",
         )
 
-    # Fan out all 8 calls (4 quadrants x {corrective, prevention}) in parallel.
-    tasks = []
-    for q in QUADRANTS:
-        tasks.append(lambda q=q: _corrective_for(q))
-        tasks.append(lambda q=q: _prevention_for(q))
+    tasks = (
+        [lambda q=q: _corrective(q) for q in CORRECTIVE_QUADRANTS]
+        + [lambda q=q: _prevention(q) for q in PREVENTION_QUADRANTS]
+    )
 
-    for quadrant, kind, result in parallel_run(tasks, max_workers=5):
+    state["corrective_actions"] = {}
+    state["prevention_actions"] = {}
+    for q, result in parallel_run(tasks, max_workers=4):
         normalized = _normalize_action_dict(result)
-        if kind == "corrective":
-            state["corrective_actions"][quadrant] = normalized
+        if q in CORRECTIVE_QUADRANTS:
+            state["corrective_actions"][q] = normalized
         else:
-            state["prevention_actions"][quadrant] = normalized
+            state["prevention_actions"][q] = normalized
 
     state["phase_4_complete"] = True
     return state
