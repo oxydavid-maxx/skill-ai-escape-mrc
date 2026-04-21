@@ -8,7 +8,8 @@ def make_call_claude_mock(responses: dict):
     (str for text, dict/list for parse_json=True).
     """
 
-    def mock_call(model, system, user, parse_json=False, max_tokens=None, temperature=None):
+    def mock_call(model, system, user, parse_json=False, max_tokens=None,
+                  temperature=None, **kwargs):
         for key, value in responses.items():
             if key in system:
                 return value

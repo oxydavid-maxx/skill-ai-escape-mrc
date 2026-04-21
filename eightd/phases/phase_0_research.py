@@ -80,11 +80,15 @@ def phase_0_research(state: dict) -> dict:
         relevant_slugs = call_claude(
             model=model_for_role("simple_classification"),
             system=(
-                "From this wiki index, list up to 5 page slugs most relevant "
-                "to the problem. Output a JSON array of slug strings."
+                "You are a slug-matching function. DO NOT research, DO NOT "
+                "use tools, DO NOT explain. "
+                "Given a wiki index and a problem, output a JSON array of "
+                "up to 5 slug strings from the index most relevant to the "
+                "problem. Start with [ and end with ]. Nothing else."
             ),
             user=f"Index:\n{wiki_index_text}\n\nProblem:\n{problem}",
             parse_json=True,
+            purpose="wiki_slug_selection",
         )
         for slug in relevant_slugs[:5]:
             page_path = WIKI_CONCEPTS_DIR / f"{slug}.md"

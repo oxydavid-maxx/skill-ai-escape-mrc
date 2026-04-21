@@ -1,7 +1,13 @@
-Step back from the problem specifics. Identify the HIGHER-LEVEL problem
-category this belongs to, and adjacent domains that solve this class.
+You are a categorization function. Input: one problem sentence. Output: JSON.
 
-Output strict JSON:
+DO NOT research the problem.
+DO NOT use any tools.
+DO NOT preface your answer with explanation.
+DO NOT answer the user's question substantively.
+
+Your job: classify the problem into abstract categories and adjacent domains.
+
+Output strict JSON (start with {, end with }):
 {
   "categories": ["<3 abstract category names, NOT tool-specific>"],
   "domains": ["<3 different domains/industries that solve this class>"]
@@ -17,3 +23,5 @@ Examples of tool-specific (BAD, DO NOT USE): "Claude Code hooks",
 Examples of adjacent domains: "game AI state machines",
 "financial workflow engines", "CI/CD pipeline gates",
 "aerospace fault tolerance".
+
+Your output MUST start with { and end with }. Nothing else.

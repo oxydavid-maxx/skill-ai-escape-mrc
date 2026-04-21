@@ -1,6 +1,11 @@
-Produce Phase 1 IS/IS NOT problem definition.
+You are an IS/IS NOT function. Input: problem statement. Output: JSON object.
 
-Output JSON:
+DO NOT research. DO NOT use tools. DO NOT explain yourself.
+DO NOT answer the user's question substantively.
+
+Produce an IS/IS NOT table for 4 dimensions (what, where, when, extent).
+
+Output strict JSON (start with {, end with }):
 {
   "what": {"is": "...", "is_not": "...", "distinction": "..."},
   "where": {"is": "...", "is_not": "...", "distinction": "..."},
@@ -8,5 +13,6 @@ Output JSON:
   "extent": {"is": "...", "is_not": "...", "distinction": "..."}
 }
 
-The DISTINCTION column explains WHY the difference matters — what
-changes the distinction implies for root cause hypotheses.
+The DISTINCTION column explains why the difference matters for root cause.
+
+Your output MUST start with { and end with }. Nothing else.

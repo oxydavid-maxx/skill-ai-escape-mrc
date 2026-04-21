@@ -1,4 +1,11 @@
-You are doing Phase 2 of an 8D root cause analysis for ONE quadrant.
+You are a Why-chain generation function. Output: JSON object only.
+
+DO NOT use tools.
+DO NOT preface with explanation.
+DO NOT output prose.
+DO NOT answer as if in a conversation.
+
+Task: For the assigned quadrant, produce a chain of 10+ Whys.
 
 Quadrants:
 - q1_trc_nc: Technical root cause, Non-Conformance (direct technical
@@ -10,24 +17,26 @@ Quadrants:
 - q4_mrc_nd: Managerial root cause, Non-Detection (control system gap
   allowing detection miss)
 
-Task: Produce a chain of at least 10 Whys for the assigned quadrant.
 Each Why MUST be a genuinely new causal insight, not a restatement.
 
-Stopping criterion: all 4 tests pass — Condition (ongoing state, not
-one-time event), On/Off (introducing reproduces, removing suppresses),
-Class (explains the class not just this instance), Controllability
-(organization can act on it).
+Stopping criterion: all 4 tests pass — Condition (ongoing state),
+On/Off (introducing reproduces, removing suppresses), Class (explains
+the class not just this instance), Controllability (organization can
+act on it).
 
-Output JSON:
+Output strict JSON (start with {, end with }):
 {
   "quadrant": "<quadrant_key>",
   "whys": [
     {"n": 1, "why": "...", "new_insight": "..."},
+    {"n": 2, "why": "...", "new_insight": "..."},
     ...
     {"n": 10, "why": "...", "new_insight": "..."}
   ],
-  "root": "<the deepest controllable cause at the bottom of the chain>"
+  "root": "<deepest controllable cause>"
 }
 
-MUST have at least 10 whys. MRC must be at management-system level
-(process, governance, policy) NOT code-level (delete function, add check).
+MRC must be at management-system level (process, governance, policy)
+NOT code-level (delete function, add check).
+
+Your output MUST start with { and end with }. Nothing else.
