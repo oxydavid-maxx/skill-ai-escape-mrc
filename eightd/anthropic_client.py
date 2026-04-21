@@ -59,7 +59,12 @@ def _find_claude_cli() -> str | None:
                 return str(candidate)
     return shutil.which("claude")
 _CLAUDE_PATH = _find_claude_cli()
-USE_CLI = not _api_key and _CLAUDE_PATH is not None
+# EIGHTD_FORCE_OPENROUTER=1 bypasses CLI entirely and routes all calls through
+# OpenRouter. Used when CLI is intermittently returning empty stdout on long
+# prompts (observed issue). Validates the pipeline structure without fighting
+# CLI flakiness.
+_FORCE_OPENROUTER = os.environ.get("EIGHTD_FORCE_OPENROUTER", "").strip() == "1"
+USE_CLI = not _api_key and _CLAUDE_PATH is not None and not _FORCE_OPENROUTER
 _client = Anthropic(api_key=_api_key) if _api_key else None
 
 
