@@ -252,7 +252,7 @@ def call_claude(
         prompt=user,
         system_prompt=system.rstrip(),
         schema=json_schema,
-        timeout_sec=300,
+        timeout_sec=600,
         max_turns=3,
     ))
 
