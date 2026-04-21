@@ -365,12 +365,30 @@ def call_claude(
         _p.emit("llm", "llm_call_start", {"purpose": purpose, "prompt_len": len(user)}, model=model)
     except Exception:
         pass
-    # Schema path: inline the schema into the system prompt and parse the
-    # text response. CLI --json-schema mode hangs intermittently on longer
-    # prompts + complex schemas (GitHub #27926), so we take the reliable
-    # route: show Claude the schema and trust it to follow, with the
-    # 3-strategy _extract_json fallback to tolerate fences/prose wrappers.
+    # Schema path: try CLI --json-schema first (works for simple schemas),
+    # on failure fall back to text-mode with schema inlined in the prompt.
+    # Known issue: --json-schema hangs on complex nested schemas, known bug.
     if json_schema is not None:
+        if USE_CLI:
+            try:
+                result = _call_cli(system=system, user=user, model=model,
+                                   allow_websearch=allow_tools,
+                                   json_schema=json_schema)
+                try:
+                    from eightd import progress as _p
+                    _p.emit("llm", "llm_call_end",
+                            {"purpose": purpose, "text_len": len(json.dumps(result))},
+                            model=model)
+                except Exception:
+                    pass
+                return result
+            except Exception as e:
+                import sys as _sys
+                _sys.stderr.write(
+                    f"[WARN] CLI schema mode failed ({purpose}): {str(e)[:200]}; "
+                    "falling back to text-mode with inline schema\n"
+                )
+        # Text-mode with schema inlined
         system = (
             system
             + f"\n\nRespond with ONLY a JSON object matching this schema. "
