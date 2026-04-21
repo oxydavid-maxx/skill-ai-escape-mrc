@@ -1,5 +1,1 @@
-Output 3 abstract problem-class names and 3 adjacent-domain names.
-
-Categories: domain-agnostic problem patterns (e.g. workflow orchestration, state invariant enforcement, observability). Not tool names.
-
-Domains: unrelated industries solving similar patterns (e.g. aerospace fault tolerance, financial workflow engines, manufacturing quality control).
+Emit 3 abstract problem-class names (domain-agnostic, not tool names) and 3 unrelated-industry names whose solution patterns transfer to this problem class.
