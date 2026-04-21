@@ -45,3 +45,41 @@ def _emit(channel: str, event: str, payload: dict, **extra: Any) -> None:
         _p.emit(channel, event, payload, **extra)
     except Exception:
         pass
+
+
+async def _collect_messages(msg_iter) -> dict:
+    """Iterate an SDK message async-iterator, return aggregated result.
+
+    Returns dict with keys:
+      text       - str, concatenation of all TextBlock.text (joined by '\n')
+      structured - dict | None, from the first ToolUseBlock named "StructuredOutput"
+      is_error   - bool, final ResultMessage.is_error (or False if absent)
+      usage      - dict, final ResultMessage.usage (or {} if absent)
+    """
+    text_parts: list[str] = []
+    structured: dict | None = None
+    is_error = False
+    usage: dict = {}
+
+    async for msg in msg_iter:
+        content = getattr(msg, "content", None)
+        if isinstance(content, list):
+            for block in content:
+                t = getattr(block, "text", None)
+                if t:
+                    text_parts.append(t)
+                if getattr(block, "name", None) == "StructuredOutput":
+                    structured = getattr(block, "input", None)
+        if hasattr(msg, "is_error"):
+            is_error = bool(getattr(msg, "is_error", False))
+        if hasattr(msg, "usage"):
+            u = getattr(msg, "usage", None)
+            if isinstance(u, dict):
+                usage = u
+
+    return {
+        "text": "\n".join(text_parts),
+        "structured": structured,
+        "is_error": is_error,
+        "usage": usage,
+    }
