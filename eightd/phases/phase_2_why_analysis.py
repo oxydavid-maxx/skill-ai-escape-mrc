@@ -8,10 +8,24 @@ from eightd import schemas
 
 
 def phase_2_why_analysis(state: dict) -> dict:
-    results = parallel_map(lambda q: _run_quadrant(state, q), QUADRANTS, max_workers=4)
+    results = parallel_map(lambda q: _run_quadrant_safe(state, q), QUADRANTS, max_workers=4)
     state["why_chains"] = dict(zip(QUADRANTS, results))
     state["phase_2_complete"] = True
     return state
+
+
+def _run_quadrant_safe(state: dict, quadrant: str) -> dict:
+    try:
+        return _run_quadrant(state, quadrant)
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[WARN] phase_2 {quadrant} failed: {str(e)[:150]}; using stub\n")
+        return {
+            "quadrant": quadrant,
+            "whys": [{"n": 1, "why": "LLM call failed — populate manually", "new_insight": ""}],
+            "root": "unknown",
+            "_fallback": True,
+        }
 
 
 def _run_quadrant(state: dict, quadrant: str) -> dict:

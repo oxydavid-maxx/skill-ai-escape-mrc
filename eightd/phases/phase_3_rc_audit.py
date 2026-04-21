@@ -30,14 +30,19 @@ def phase_3_rc_audit(state: dict) -> dict:
             f"{json.dumps(state['why_chains'], ensure_ascii=False)[:6000]}\n\n"
             "Use WebSearch if you want to verify or benchmark a specific claim."
         )
-        audit = call_claude(
-            model=model_for_role("rc_audit"),
-            system=system,
-            user=user_msg,
-            json_schema=schemas.RC_AUDIT,
-            purpose=f"phase_3_rc_audit_round_{round_num}",
-            allow_tools=True,
-        )
+        try:
+            audit = call_claude(
+                model=model_for_role("rc_audit"),
+                system=system,
+                user=user_msg,
+                json_schema=schemas.RC_AUDIT,
+                purpose=f"phase_3_rc_audit_round_{round_num}",
+                allow_tools=True,
+            )
+        except Exception as e:
+            import sys
+            sys.stderr.write(f"[WARN] phase_3 round {round_num} failed: {str(e)[:150]}; skipping round\n")
+            audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
         state["phase_3_rounds"].append(audit)
 
         # Apply ADDRESSABLE fixes to the why_chains in-place so round N+1

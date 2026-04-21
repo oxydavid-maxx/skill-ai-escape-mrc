@@ -17,13 +17,30 @@ def phase_6_verification(state: dict) -> dict:
         "problem": state.get("problem", ""),
     }, ensure_ascii=False)
 
-    plan = call_claude(
-        model=model_for_role("proof_of_action"),
-        system=load_prompt("proof_of_action"),
-        user=payload,
-        json_schema=schemas.VERIFICATION_PLAN,
-        purpose="phase_6_verification_plan",
-    )
+    try:
+        plan = call_claude(
+            model=model_for_role("proof_of_action"),
+            system=load_prompt("proof_of_action"),
+            user=payload,
+            json_schema=schemas.VERIFICATION_PLAN,
+            purpose="phase_6_verification_plan",
+        )
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[WARN] phase_6 verification LLM failed: {str(e)[:200]}; using stub\n")
+        plan = {
+            "quadrants": [
+                {"quadrant": q,
+                 "action_type": "corrective" if q.startswith("q1") or q.startswith("q2") else "prevention",
+                 "metric": "TBD", "target": "TBD", "data_source": "TBD",
+                 "baseline": "unknown", "measurement_schedule": "TBD",
+                 "failure_response": "TBD"}
+                for q in ("q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd")
+            ],
+            "overall_timeframe": "6 months minimum",
+            "phase_8_trigger": "next recurrence of same problem class",
+            "_fallback": True,
+        }
 
     state["verification_plan"] = plan
 

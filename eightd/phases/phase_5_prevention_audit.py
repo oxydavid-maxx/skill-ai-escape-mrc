@@ -30,14 +30,19 @@ def phase_5_prevention_audit(state: dict) -> dict:
             f"{json.dumps(preventions, ensure_ascii=False)[:5000]}\n\n"
             "Use WebSearch if you want to benchmark against state-of-the-art."
         )
-        audit = call_claude(
-            model=model_for_role("prevention_audit"),
-            system=system,
-            user=user_msg,
-            json_schema=schemas.PREVENTION_AUDIT,
-            purpose=f"phase_5_prevention_audit_round_{round_num}",
-            allow_tools=True,
-        )
+        try:
+            audit = call_claude(
+                model=model_for_role("prevention_audit"),
+                system=system,
+                user=user_msg,
+                json_schema=schemas.PREVENTION_AUDIT,
+                purpose=f"phase_5_prevention_audit_round_{round_num}",
+                allow_tools=True,
+            )
+        except Exception as e:
+            import sys
+            sys.stderr.write(f"[WARN] phase_5 round {round_num} failed: {str(e)[:150]}; skipping round\n")
+            audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
         state["phase_5_rounds"].append(audit)
 
         _apply_fixes(state["prevention_actions"], audit)

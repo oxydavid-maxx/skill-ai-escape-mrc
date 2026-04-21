@@ -42,22 +42,37 @@ def phase_4_actions(state: dict) -> dict:
         }, ensure_ascii=False)
 
     def _corrective(q):
-        return q, call_claude(
-            model=model_for_role("corrective_action"),
-            system=corrective_prompt,
-            user=_build_payload(q),
-            json_schema=schemas.CORRECTIVE_ACTION,
-            purpose=f"corrective_{q}",
-        )
+        try:
+            r = call_claude(
+                model=model_for_role("corrective_action"),
+                system=corrective_prompt,
+                user=_build_payload(q),
+                json_schema=schemas.CORRECTIVE_ACTION,
+                purpose=f"corrective_{q}",
+            )
+            return q, r
+        except Exception as e:
+            import sys
+            sys.stderr.write(f"[WARN] corrective {q} failed: {str(e)[:150]}; using stub\n")
+            return q, {"quadrant": q, "action": "TBD — LLM failed",
+                       "rationale": "populate manually", "_fallback": True}
 
     def _prevention(q):
-        return q, call_claude(
-            model=model_for_role("prevention_action"),
-            system=prevention_prompt,
-            user=_build_payload(q),
-            json_schema=schemas.PREVENTION_ACTION,
-            purpose=f"prevention_{q}",
-        )
+        try:
+            r = call_claude(
+                model=model_for_role("prevention_action"),
+                system=prevention_prompt,
+                user=_build_payload(q),
+                json_schema=schemas.PREVENTION_ACTION,
+                purpose=f"prevention_{q}",
+            )
+            return q, r
+        except Exception as e:
+            import sys
+            sys.stderr.write(f"[WARN] prevention {q} failed: {str(e)[:150]}; using stub\n")
+            return q, {"quadrant": q, "action": "TBD — LLM failed",
+                       "gate_test": {"scope": "FAIL", "persistence": "FAIL", "measurability": "FAIL"},
+                       "hierarchy_level": 5, "_fallback": True}
 
     tasks = (
         [lambda q=q: _corrective(q) for q in CORRECTIVE_QUADRANTS]
