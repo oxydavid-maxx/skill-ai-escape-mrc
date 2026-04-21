@@ -8,6 +8,7 @@ from pathlib import Path
 
 from eightd.anthropic_client import call_claude, websearch
 from eightd.models import model_for_role
+from eightd.parallel import parallel_map
 from eightd.utils import load_prompt, safe_read_text
 
 WIKI_INDEX_PATH = Path("D:/D-claude/personal-wiki/wiki/index.md")
@@ -34,12 +35,8 @@ def phase_0_research(state: dict) -> dict:
         parse_json=True,
     )
     kw_str = " ".join(keywords)
-    state["websearch_specific"] = [
-        websearch(f"how to solve {kw_str}"),
-        websearch(f"{kw_str} best practices 2026"),
-    ]
 
-    # 0b: Meta categorization + multi-site searches
+    # 0b: Meta categorization
     meta = call_claude(
         model=model_for_role("meta_categorization"),
         system=load_prompt("meta_categorization"),
@@ -49,21 +46,32 @@ def phase_0_research(state: dict) -> dict:
     state["meta_categories"] = meta["categories"]
     state["meta_domains"] = meta["domains"]
 
-    state["websearch_meta"] = []
-    for category in meta["categories"]:
-        for site in PROMINENT_SITES:
-            state["websearch_meta"].append(
-                websearch(f"{category} site:{site}")
-            )
-
+    # Build full websearch query list and run in parallel.
+    # Order is preserved by parallel_map so we can slice back into sections.
+    specific_queries = [
+        f"how to solve {kw_str}",
+        f"{kw_str} best practices 2026",
+    ]
+    meta_queries = [
+        f"{category} site:{site}"
+        for category in meta["categories"]
+        for site in PROMINENT_SITES
+    ]
     # Cross-domain: limit to 1 domain to save latency. First domain is most
-    # semantically distant per Opus's ordering (reduced from 3 to 1 per user
-    # feedback: "20 searches is overkill").
-    state["websearch_cross_domain"] = []
-    for domain in meta["domains"][:1]:
-        state["websearch_cross_domain"].append(
-            websearch(f"how does {domain} solve {meta['categories'][0]}")
-        )
+    # semantically distant per Opus's ordering (reduced from 3 to 1).
+    cross_queries = [
+        f"how does {domain} solve {meta['categories'][0]}"
+        for domain in meta["domains"][:1]
+    ]
+
+    all_queries = specific_queries + meta_queries + cross_queries
+    all_results = parallel_map(websearch, all_queries, max_workers=5)
+
+    n_spec = len(specific_queries)
+    n_meta = len(meta_queries)
+    state["websearch_specific"] = all_results[:n_spec]
+    state["websearch_meta"] = all_results[n_spec:n_spec + n_meta]
+    state["websearch_cross_domain"] = all_results[n_spec + n_meta:]
 
     # Wiki: index + up to 5 relevant concept pages
     state["wiki_pages"] = []

@@ -1,24 +1,29 @@
 """Phase 2: Why analysis — 4 quadrants, >=10 whys each, enforced by count."""
 from eightd.anthropic_client import call_claude
 from eightd.models import model_for_role
+from eightd.parallel import parallel_map
 from eightd.utils import load_prompt
 from eightd.state import QUADRANTS
 
 
 def phase_2_why_analysis(state: dict) -> dict:
-    chains = {}
-    for quadrant in QUADRANTS:
-        chain = _run_quadrant(state, quadrant)
-        attempts = 0
-        while len(chain.get("whys", [])) < 10 and attempts < 3:
-            chain = _run_quadrant(state, quadrant, retry_note=True)
-            attempts += 1
-        if len(chain.get("whys", [])) < 10:
-            raise RuntimeError(f"Phase 2: {quadrant} failed to produce 10 whys after 3 retries")
-        chains[quadrant] = chain
+    # Quadrants are independent — fan out in parallel.
+    results = parallel_map(lambda q: _analyze_quadrant_with_retry(state, q), QUADRANTS, max_workers=4)
+    chains = dict(zip(QUADRANTS, results))
     state["why_chains"] = chains
     state["phase_2_complete"] = True
     return state
+
+
+def _analyze_quadrant_with_retry(state: dict, quadrant: str) -> dict:
+    chain = _run_quadrant(state, quadrant)
+    attempts = 0
+    while len(chain.get("whys", [])) < 10 and attempts < 3:
+        chain = _run_quadrant(state, quadrant, retry_note=True)
+        attempts += 1
+    if len(chain.get("whys", [])) < 10:
+        raise RuntimeError(f"Phase 2: {quadrant} failed to produce 10 whys after 3 retries")
+    return chain
 
 
 def _run_quadrant(state: dict, quadrant: str, retry_note: bool = False) -> dict:

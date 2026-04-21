@@ -63,9 +63,13 @@ def phase_5_prevention_audit(state: dict) -> dict:
         for w in audit.get("weaknesses", []):
             q = w.get("quadrant")
             if q in state["prevention_actions"]:
-                state["prevention_actions"][q].setdefault("audit_notes", []).append(
-                    w.get("suggested_fix", "")
-                )
+                pa = state["prevention_actions"][q]
+                # phase_4 normalizes to dict, but guard here in case of
+                # checkpoint resume from an older run that saved a list shape.
+                if isinstance(pa, dict):
+                    pa.setdefault("audit_notes", []).append(
+                        w.get("suggested_fix", "")
+                    )
 
     if force_accept:
         state["phase_5_verdict"] = "EXHAUSTED"

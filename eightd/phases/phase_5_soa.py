@@ -1,5 +1,6 @@
 """Phase 5a: SoA research on prevention methods."""
 from eightd.anthropic_client import websearch
+from eightd.parallel import parallel_map
 
 
 def phase_5_soa_research(state: dict) -> dict:
@@ -12,5 +13,5 @@ def phase_5_soa_research(state: dict) -> dict:
         "preventive controls best practices site:reddit.com",
         "defense in depth strategies site:arxiv.org",
     ]
-    state["phase_5_soa_research"] = [websearch(q) for q in queries]
+    state["phase_5_soa_research"] = parallel_map(websearch, queries)
     return state
