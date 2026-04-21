@@ -202,72 +202,85 @@ def _extract_json(text: str):
     )
 
 
-def _translate_model_for_openrouter(model: str) -> str:
-    """Translate Anthropic model ID to OpenRouter format.
+def _should_retry(retry_state) -> bool:
+    """Retry on transport/network errors, NOT on JSONDecodeError.
 
-    Examples:
-      claude-opus-4-6 -> anthropic/claude-opus-4
-      claude-sonnet-4-6 -> anthropic/claude-sonnet-4
-      claude-haiku-4-5-20251001 -> anthropic/claude-3.5-haiku
+    JSON parse failures are deterministic given same prompt.
     """
-    m = model.lower()
-    m = re.sub(r"-\d{8}$", "", m)
-    if "opus" in m:
-        return "anthropic/claude-opus-4"
-    if "sonnet" in m:
-        return "anthropic/claude-sonnet-4"
-    if "haiku" in m:
-        return "anthropic/claude-3.5-haiku"
-    return "anthropic/claude-sonnet-4"
+    exc = retry_state.outcome.exception() if retry_state.outcome else None
+    if exc is None:
+        return False
+    if isinstance(exc, json.JSONDecodeError):
+        return False
+    return True
 
 
-def _openrouter_key() -> str:
-    """Resolve OpenRouter API key from config.yaml or env. Raises if absent."""
-    try:
-        import yaml
-        cfg_path = Path("D:/D-claude/daily_brief/config.yaml")
-        if cfg_path.exists():
-            with open(cfg_path, encoding="utf-8") as f:
-                cfg = yaml.safe_load(f) or {}
-            k = (cfg.get("openrouter") or {}).get("api_key", "")
-            if k:
-                return k.strip()
-    except Exception:
-        pass
-    k = os.environ.get("OPENROUTER_API_KEY", "").strip()
-    if not k:
-        raise RuntimeError("No OpenRouter key available (neither config.yaml nor env)")
-    return k
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30),
+       retry=_should_retry, reraise=True)
+def call_claude(
+    model: str,
+    system: str,
+    user: str,
+    parse_json: bool = False,
+    max_tokens: int = 8000,
+    temperature: float = 0.3,
+    purpose: str = "unknown",
+    allow_tools: bool = False,
+    json_schema: dict | None = None,
+):
+    """Call Claude via the Agent SDK. Drop-in replacement for the legacy
+    anthropic_client.call_claude.
 
+    Signature and return shapes match the legacy module:
+      - text mode           -> str
+      - json_schema != None -> dict (schema-conformant)
+      - parse_json=True     -> dict (best-effort JSON parse)
 
-def _call_openrouter_text(
-    model: str, system: str, user: str, max_tokens: int, temperature: float
-) -> str:
-    """Fallback: plain text LLM call via OpenRouter's OpenAI-compatible API."""
-    import openai
-    client = openai.OpenAI(api_key=_openrouter_key(), base_url="https://openrouter.ai/api/v1")
-    resp = client.chat.completions.create(
-        model=_translate_model_for_openrouter(model),
-        max_tokens=max_tokens,
-        temperature=temperature,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    )
-    return resp.choices[0].message.content or ""
+    `max_tokens`, `temperature`, `allow_tools` are accepted for signature
+    compatibility with the legacy caller. The SDK version ignores
+    max_tokens/temperature (delegated to the claude CLI's own model config);
+    `allow_tools` is currently unused because this skill never needs
+    WebSearch inside a schema call (websearch() is the dedicated path).
 
+    On SDK failure: raises. No provider-level fallback. @retry(3x) handles
+    transient transport errors; deterministic failures propagate.
+    """
+    _emit("llm", "llm_call_start",
+          {"purpose": purpose, "prompt_len": len(user)}, model=model)
 
-def _call_openrouter_websearch(query_text: str, max_tokens: int) -> str:
-    """Fallback: websearch via OpenRouter :online model variants."""
-    import openai
-    client = openai.OpenAI(api_key=_openrouter_key(), base_url="https://openrouter.ai/api/v1")
-    resp = client.chat.completions.create(
-        model="anthropic/claude-sonnet-4:online",
-        max_tokens=max_tokens,
-        messages=[{
-            "role": "user",
-            "content": f"Search: {query_text}\n\nProvide top 3 findings with source URLs and brief summaries.",
-        }],
-    )
-    return resp.choices[0].message.content or ""
+    result = asyncio.run(_sdk_query(
+        prompt=user,
+        system_prompt=system.rstrip(),
+        schema=json_schema,
+        timeout_sec=300,
+        max_turns=3,
+    ))
+
+    if json_schema is not None:
+        so = result.get("structured")
+        if so is None:
+            raise RuntimeError(
+                f"SDK schema call returned no structured output "
+                f"(is_error={result['is_error']}, text_len={len(result['text'])})"
+            )
+        _emit("llm", "llm_call_end",
+              {"purpose": purpose, "text_len": len(json.dumps(so))}, model=model)
+        return so
+
+    text = result["text"]
+    if not text:
+        raise RuntimeError(
+            f"SDK returned empty text (is_error={result['is_error']}, "
+            f"purpose={purpose})"
+        )
+
+    _emit("llm", "llm_call_end",
+          {"purpose": purpose, "text_len": len(text)}, model=model)
+
+    if parse_json:
+        try:
+            return _extract_json(text)
+        except json.JSONDecodeError:
+            _dump_parse_failure(text, f"{purpose}_first_attempt")
+            raise
+    return text

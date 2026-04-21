@@ -146,3 +146,69 @@ def test_extract_json_raises_on_garbage():
     from eightd.sdk_client import _extract_json
     with pytest.raises(_j.JSONDecodeError):
         _extract_json("no json here at all")
+
+
+def test_call_claude_text_mode_returns_string():
+    from eightd import sdk_client
+    msgs = [FakeAssistantMessage([FakeTextBlock("a bullet")]), FakeResultMessage()]
+
+    def fake_query(*, prompt, options=None, **_):
+        return _async_iter(msgs)
+
+    with patch("eightd.sdk_client.query", side_effect=fake_query):
+        result = sdk_client.call_claude(
+            model="claude-opus-4-6", system="s", user="u", purpose="test",
+        )
+    assert result == "a bullet"
+
+
+def test_call_claude_schema_mode_returns_dict():
+    from eightd import sdk_client
+    msgs = [
+        FakeAssistantMessage([FakeToolUseBlock("StructuredOutput", {"k": 1})]),
+        FakeResultMessage(),
+    ]
+
+    def fake_query(*, prompt, options=None, **_):
+        return _async_iter(msgs)
+
+    schema = {"type": "object", "properties": {"k": {"type": "integer"}}}
+    with patch("eightd.sdk_client.query", side_effect=fake_query):
+        result = sdk_client.call_claude(
+            model="claude-opus-4-6", system="s", user="u",
+            json_schema=schema, purpose="test",
+        )
+    assert result == {"k": 1}
+
+
+def test_call_claude_parse_json_mode_extracts_object():
+    from eightd import sdk_client
+    msgs = [
+        FakeAssistantMessage([FakeTextBlock('Here: {"a": 1} done.')]),
+        FakeResultMessage(),
+    ]
+
+    def fake_query(*, prompt, options=None, **_):
+        return _async_iter(msgs)
+
+    with patch("eightd.sdk_client.query", side_effect=fake_query):
+        result = sdk_client.call_claude(
+            model="claude-opus-4-6", system="s", user="u",
+            parse_json=True, purpose="test",
+        )
+    assert result == {"a": 1}
+
+
+def test_call_claude_empty_text_raises():
+    from eightd import sdk_client
+    msgs = [FakeResultMessage()]
+
+    def fake_query(*, prompt, options=None, **_):
+        return _async_iter(msgs)
+
+    # All 3 tenacity retries will emit empty; call should ultimately raise.
+    with patch("eightd.sdk_client.query", side_effect=fake_query):
+        with pytest.raises(RuntimeError, match="empty text"):
+            sdk_client.call_claude(
+                model="claude-opus-4-6", system="s", user="u", purpose="test",
+            )
