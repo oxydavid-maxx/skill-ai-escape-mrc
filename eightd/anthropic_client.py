@@ -349,27 +349,26 @@ def call_claude(
         _p.emit("llm", "llm_call_start", {"purpose": purpose, "prompt_len": len(user)}, model=model)
     except Exception:
         pass
-    # Schema-constrained path: returns parsed object directly, no text stage.
+    # Schema-constrained path: returns parsed object directly.
+    # No text-mode fallback — when phases ask for schema output they want a
+    # dict, not prose. If CLI schema mode fails, tenacity retries the whole
+    # call; after 3 attempts we raise and the caller handles it.
     if json_schema is not None:
         if USE_CLI:
+            result = _call_cli(system=system, user=user, model=model,
+                               allow_websearch=allow_tools,
+                               json_schema=json_schema)
             try:
-                result = _call_cli(system=system, user=user, model=model,
-                                   allow_websearch=allow_tools,
-                                   json_schema=json_schema)
-                try:
-                    from eightd import progress as _p
-                    _p.emit("llm", "llm_call_end",
-                            {"purpose": purpose, "text_len": len(json.dumps(result))},
-                            model=model)
-                except Exception:
-                    pass
-                return result
-            except Exception as e:
-                import sys as _sys
-                _sys.stderr.write(f"[WARN] CLI schema-mode failed ({model}): {e}; falling back to text-mode\n")
-                # Fall through to text mode with schema hint in system
-                system = system + f"\n\nOutput must match this JSON schema:\n{json.dumps(json_schema)}"
-        # If no CLI or CLI failed, continue with text parsing as fallback
+                from eightd import progress as _p
+                _p.emit("llm", "llm_call_end",
+                        {"purpose": purpose, "text_len": len(json.dumps(result))},
+                        model=model)
+            except Exception:
+                pass
+            return result
+        # No CLI available: OpenRouter path doesn't support schema mode.
+        # Fall through with schema appended to system for best-effort.
+        system = system + f"\n\nOutput must match this JSON schema:\n{json.dumps(json_schema)}"
 
     if _client is not None:
         text = _sdk_call_with_optional_tools(

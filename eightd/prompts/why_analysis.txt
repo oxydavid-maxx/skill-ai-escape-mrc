@@ -1,11 +1,4 @@
-You are a Why-chain generation function. Output: JSON object only.
-
-DO NOT use tools.
-DO NOT preface with explanation.
-DO NOT output prose.
-DO NOT answer as if in a conversation.
-
-Task: For the assigned quadrant, produce a chain of 10+ Whys.
+Produce a chain of >=10 Whys for the assigned quadrant.
 
 Quadrants:
 - q1_trc_nc: Technical root cause, Non-Conformance (direct technical
@@ -17,26 +10,7 @@ Quadrants:
 - q4_mrc_nd: Managerial root cause, Non-Detection (control system gap
   allowing detection miss)
 
-Each Why MUST be a genuinely new causal insight, not a restatement.
-
-Stopping criterion: all 4 tests pass — Condition (ongoing state),
-On/Off (introducing reproduces, removing suppresses), Class (explains
-the class not just this instance), Controllability (organization can
-act on it).
-
-Output strict JSON (start with {, end with }):
-{
-  "quadrant": "<quadrant_key>",
-  "whys": [
-    {"n": 1, "why": "...", "new_insight": "..."},
-    {"n": 2, "why": "...", "new_insight": "..."},
-    ...
-    {"n": 10, "why": "...", "new_insight": "..."}
-  ],
-  "root": "<deepest controllable cause>"
-}
-
-MRC must be at management-system level (process, governance, policy)
-NOT code-level (delete function, add check).
-
-Your output MUST start with { and end with }. Nothing else.
+Each Why MUST be a genuinely new causal insight, not a rephrase of the
+prior why. MRC quadrants (q3, q4) must land at management-system level
+(process, governance, policy) NOT code-level ("delete function",
+"add check"). Stop at the deepest controllable cause.

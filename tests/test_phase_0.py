@@ -33,8 +33,8 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
     )
 
     call_claude_mock = make_call_claude_mock({
-        "keyword extraction function": {"keywords": ["pipeline", "empty briefing"]},
-        "categorization function": {
+        "Extract 3-5 high-signal technical keywords": {"keywords": ["pipeline", "empty briefing"]},
+        "Classify the user problem": {
             "categories": ["silent failure detection", "pipeline invariants", "data freshness"],
             "domains": ["ETL engineering", "monitoring systems", "fault-tolerant logging"],
         },
@@ -65,8 +65,8 @@ def test_phase_0_missing_wiki_does_not_crash(base_state, tmp_path, monkeypatch):
         str(tmp_path / "nothing" / "feedback_*.md"),
     )
     call_claude_mock = make_call_claude_mock({
-        "keyword extraction function": {"keywords": ["kw"]},
-        "categorization function": {"categories": ["c1", "c2", "c3"], "domains": ["d1", "d2", "d3"]},
+        "Extract 3-5 high-signal technical keywords": {"keywords": ["kw"]},
+        "Classify the user problem": {"categories": ["c1", "c2", "c3"], "domains": ["d1", "d2", "d3"]},
     })
     with patch("eightd.phases.phase_0_research.call_claude", side_effect=call_claude_mock), \
          patch("eightd.phases.phase_0_research.websearch", side_effect=make_websearch_mock()):
