@@ -1,4 +1,3 @@
-Produce a Phase 1 IS/IS NOT problem definition across 4 dimensions
-(what, where, when, extent). For each dimension, state what the problem
-IS, what it IS NOT, and what distinction that draws — the distinction
-is the diagnostic signal that narrows root cause hypotheses.
+Output an IS/IS NOT problem table across 4 dimensions: what, where, when, extent.
+
+For each dimension, fill: is (what the problem IS), is_not (what it is NOT), distinction (why the difference narrows root cause hypotheses).

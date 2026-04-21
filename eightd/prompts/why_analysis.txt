@@ -1,16 +1,9 @@
-Produce a chain of >=10 Whys for the assigned quadrant.
+Output a chain of >=10 Whys for the assigned quadrant.
 
 Quadrants:
-- q1_trc_nc: Technical root cause, Non-Conformance (direct technical
-  cause that produced the defect)
-- q2_trc_nd: Technical root cause, Non-Detection (detection method that
-  failed to catch it)
-- q3_mrc_nc: Managerial root cause, Non-Conformance (process/governance
-  gap that allowed it)
-- q4_mrc_nd: Managerial root cause, Non-Detection (control system gap
-  allowing detection miss)
+- q1_trc_nc: technical root cause, non-conformance
+- q2_trc_nd: technical root cause, non-detection
+- q3_mrc_nc: managerial root cause, non-conformance
+- q4_mrc_nd: managerial root cause, non-detection
 
-Each Why MUST be a genuinely new causal insight, not a rephrase of the
-prior why. MRC quadrants (q3, q4) must land at management-system level
-(process, governance, policy) NOT code-level ("delete function",
-"add check"). Stop at the deepest controllable cause.
+Each why must be a new causal insight (not a rephrase). MRC quadrants (q3, q4) land at management-system level (process, governance, policy), not code-level. Stop at the deepest controllable cause; set `root` to that cause.

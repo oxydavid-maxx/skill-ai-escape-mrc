@@ -1,9 +1,5 @@
-Classify the user problem into 3 abstract categories (not tool-specific)
-and 3 adjacent domains/industries that solve this class of problem.
+Output 3 abstract problem-class names and 3 adjacent-domain names.
 
-Examples of abstract categories: workflow orchestration, state invariant
-enforcement, distributed consensus, observability, error budget management.
-Not tool-specific: "Claude Code hooks", "Git pre-commit", etc.
+Categories: domain-agnostic problem patterns (e.g. workflow orchestration, state invariant enforcement, observability). Not tool names.
 
-Examples of adjacent domains: game AI state machines, financial workflow
-engines, CI/CD pipeline gates, aerospace fault tolerance.
+Domains: unrelated industries solving similar patterns (e.g. aerospace fault tolerance, financial workflow engines, manufacturing quality control).

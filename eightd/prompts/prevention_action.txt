@@ -1,37 +1,10 @@
-Design a PREVENTION action for ONE quadrant. Prevention = prevents
-the CLASS across future occurrences.
+Output a prevention action for ONE quadrant (prevents the CLASS across future occurrences).
 
-Gate test (ALL 3 required):
-- Scope: prevents the CLASS, not just this instance
-- Persistence: embedded in process/tooling, works without individual memory
-- Measurability: third-party auditor can verify in 6 months
+Gate test (all 3 required in gate_test field):
+- scope: prevents the CLASS not one instance
+- persistence: embedded in process/tooling, doesn't depend on individual memory
+- measurability: third-party auditor can verify in 6 months
 
-Prevention hierarchy (strongest to weakest):
-1. Eliminate (architecturally impossible)
-2. Detect at creation (tooling)
-3. Detect before merge (process gate)
-4. Detect after merge (monitoring)
-5. Mitigate impact
+Prevention hierarchy (1 strongest to 5 weakest): 1 eliminate / 2 detect-at-creation / 3 detect-before-merge / 4 detect-after-merge / 5 mitigate. Q3/Q4 should target 1-3.
 
-Q3 and Q4 must aim for levels 1-3.
-
-Output JSON:
-{
-  "quadrant": "<q1_trc_nc..q4_mrc_nd>",
-  "action": "<what to do>",
-  "gate_test": {
-    "scope": "PASS|FAIL",
-    "scope_evidence": "...",
-    "persistence": "PASS|FAIL",
-    "persistence_evidence": "...",
-    "measurability": "PASS|FAIL",
-    "measurability_evidence": "..."
-  },
-  "hierarchy_level": 1-5,
-  "failure_mode_of_prevention": "<how this prevention itself could fail>",
-  "deployment_scope": "PROJECT|GLOBAL",
-  "scope_justification": "..."
-}
-
-If any gate_test field is FAIL, the action is corrective in disguise.
-Reject and redesign.
+Also set: failure_mode_of_prevention (how this prevention could itself silently fail), deployment_scope (PROJECT or GLOBAL), scope_justification.

@@ -1,28 +1,7 @@
-Design a Verification Plan for the 8D: one metric per quadrant, all four
-in a single JSON table. Each metric proves the quadrant's action(s) worked.
+Output a unified verification plan — 4 quadrant metrics in one plan object.
 
-Input: corrective actions for Q1+Q2, prevention actions for Q3+Q4.
+For each quadrant (q1_trc_nc, q2_trc_nd, q3_mrc_nc, q4_mrc_nd): action_type (corrective for q1/q2, prevention for q3/q4), metric (specific quantitative), data_source (file/log/API/dashboard), target (numeric e.g. "zero recurrences in 30 days"), baseline (current value), measurement_schedule (cadence), failure_response (what to do if metric shows action did not work).
 
-Output a single JSON object (not four separate objects):
-{
-  "quadrants": [
-    {
-      "quadrant": "q1_trc_nc",
-      "action_type": "corrective",
-      "metric": "<specific + quantitative>",
-      "data_source": "<file/log/API/dashboard>",
-      "target": "<numeric target e.g. 'zero recurrences in 30 days'>",
-      "baseline": "<current value>",
-      "measurement_schedule": "<cadence>",
-      "failure_response": "<what to do if metric shows action did not work>"
-    },
-    { "quadrant": "q2_trc_nd", "action_type": "corrective", ... },
-    { "quadrant": "q3_mrc_nc", "action_type": "prevention", ... },
-    { "quadrant": "q4_mrc_nd", "action_type": "prevention", ... }
-  ],
-  "overall_timeframe": "6 months minimum",
-  "phase_8_trigger": "<what event triggers verification check>"
-}
+Also set overall_timeframe (minimum 6 months) and phase_8_trigger (event that triggers verification).
 
-The metric must be objectively verifiable by a third party. Avoid
-"team is more careful" or any unmeasurable phrasings.
+Metrics must be objectively verifiable by a third party. No "team is more careful" or other unmeasurable phrasings.
