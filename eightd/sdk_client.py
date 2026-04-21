@@ -200,3 +200,74 @@ def _extract_json(text: str):
         text,
         0,
     )
+
+
+def _translate_model_for_openrouter(model: str) -> str:
+    """Translate Anthropic model ID to OpenRouter format.
+
+    Examples:
+      claude-opus-4-6 -> anthropic/claude-opus-4
+      claude-sonnet-4-6 -> anthropic/claude-sonnet-4
+      claude-haiku-4-5-20251001 -> anthropic/claude-3.5-haiku
+    """
+    m = model.lower()
+    m = re.sub(r"-\d{8}$", "", m)
+    if "opus" in m:
+        return "anthropic/claude-opus-4"
+    if "sonnet" in m:
+        return "anthropic/claude-sonnet-4"
+    if "haiku" in m:
+        return "anthropic/claude-3.5-haiku"
+    return "anthropic/claude-sonnet-4"
+
+
+def _openrouter_key() -> str:
+    """Resolve OpenRouter API key from config.yaml or env. Raises if absent."""
+    try:
+        import yaml
+        cfg_path = Path("D:/D-claude/daily_brief/config.yaml")
+        if cfg_path.exists():
+            with open(cfg_path, encoding="utf-8") as f:
+                cfg = yaml.safe_load(f) or {}
+            k = (cfg.get("openrouter") or {}).get("api_key", "")
+            if k:
+                return k.strip()
+    except Exception:
+        pass
+    k = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if not k:
+        raise RuntimeError("No OpenRouter key available (neither config.yaml nor env)")
+    return k
+
+
+def _call_openrouter_text(
+    model: str, system: str, user: str, max_tokens: int, temperature: float
+) -> str:
+    """Fallback: plain text LLM call via OpenRouter's OpenAI-compatible API."""
+    import openai
+    client = openai.OpenAI(api_key=_openrouter_key(), base_url="https://openrouter.ai/api/v1")
+    resp = client.chat.completions.create(
+        model=_translate_model_for_openrouter(model),
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+    )
+    return resp.choices[0].message.content or ""
+
+
+def _call_openrouter_websearch(query_text: str, max_tokens: int) -> str:
+    """Fallback: websearch via OpenRouter :online model variants."""
+    import openai
+    client = openai.OpenAI(api_key=_openrouter_key(), base_url="https://openrouter.ai/api/v1")
+    resp = client.chat.completions.create(
+        model="anthropic/claude-sonnet-4:online",
+        max_tokens=max_tokens,
+        messages=[{
+            "role": "user",
+            "content": f"Search: {query_text}\n\nProvide top 3 findings with source URLs and brief summaries.",
+        }],
+    )
+    return resp.choices[0].message.content or ""
