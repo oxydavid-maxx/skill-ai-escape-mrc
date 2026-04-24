@@ -15,6 +15,7 @@ AttributeError bug in prior run). Includes:
 Also sends email via Outlook COM.
 """
 import json
+import os
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -321,7 +322,7 @@ def main():
     # Save report
     slug = sluggify(state.get("problem", "unknown"))
     date_str = datetime.now().strftime("%Y-%m-%d")
-    out_path = Path(r"D:/D-claude/daily_brief/docs/8d-reports") / f"8d-{date_str}-{slug}-partial.md"
+    out_path = Path(os.environ.get("CLAUDE_EIGHTD_REPORTS_DIR", r"D:/D-claude/skills/skill-8d-mrc/docs/8d-reports")) / f"8d-{date_str}-{slug}-partial.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report_md, encoding="utf-8")
     print(f"Report written to: {out_path}")

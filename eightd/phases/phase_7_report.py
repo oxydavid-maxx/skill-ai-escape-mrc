@@ -49,7 +49,7 @@ def _canonical_report_path(state: dict) -> Path:
     date_str = datetime.now().strftime("%Y-%m-%d")
     base = os.environ.get(
         "CLAUDE_EIGHTD_REPORTS_DIR",
-        "D:/D-claude/daily_brief/docs/8d-reports",
+        "D:/D-claude/skills/skill-8d-mrc/docs/8d-reports",
     )
     return Path(base) / f"8d-{date_str}-{slug}.md"
 

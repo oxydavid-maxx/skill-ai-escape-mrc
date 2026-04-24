@@ -23,9 +23,10 @@ Optional flags:
 
 On success, `run_8d.py` prints the path to the final report on stdout.
 The report is saved at a canonical project location (default:
-`D:/D-claude/daily_brief/docs/8d-reports/`, overridable via
-`CLAUDE_EIGHTD_REPORTS_DIR` env var). The report is also emailed to
-the user via Outlook COM (configured in `~/.claude/email.json`).
+`D:/D-claude/skills/skill-8d-mrc/docs/8d-reports/` — reports live in the
+skill's own repo since that's the producer of these artifacts;
+overridable via `CLAUDE_EIGHTD_REPORTS_DIR` env var). The report is also
+emailed to the user via Outlook COM (configured in `~/.claude/email.json`).
 
 Summarize the report for the user. Do not attempt to run phases manually —
 the Python FSM is the only correct implementation.
