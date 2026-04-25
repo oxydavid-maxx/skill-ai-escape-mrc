@@ -13,7 +13,35 @@ from eightd.delivery.email import send_8d_report_email
 URL_RE = re.compile(r"https?://[^\s)\"']+")
 
 
+class PrerequisiteRefusedError(RuntimeError):
+    """Phase 7 refused to emit because a prior phase did not pass.
+
+    Raised when phase_3_status or phase_5_status is anything other than
+    'passed'. Catches the ecosystem-wide degraded-emission-with-warning
+    anti-pattern at its source — instead of emitting a report containing
+    'EXHAUSTED with fallback' / 'no citations were retrieved', we refuse
+    to emit and surface the structural failure to the operator.
+
+    Bypass: set EIGHTD_EMIT_DESPITE_FAILED_AUDITS=1 with explicit reason
+    captured in EIGHTD_EMIT_DESPITE_FAILED_AUDITS_REASON.
+    """
+
+
 def phase_7_report(state: dict) -> dict:
+    # WIKI-CONSULTED: silent-staleness#data-level-freshness-check
+    # WIKI-CONSULTED: function-replacement-convention
+    # WIKI-CONSULTED: wiki-to-code-traceability#triple-marker-convention
+    # WIKI-FINDING: prior code emitted a report regardless of phase_3/phase_5
+    #   audit status, even when those phases used the _fallback path due to
+    #   LLM errors or never produced real citations. Phase 7 then composed a
+    #   self-exonerating warning ("EXHAUSTED with fallback", "no external URL
+    #   citations were retrieved... proceeding") and shipped it. Per ecosystem
+    #   8D 2026-04-25 (run-1777092777-6e277c0c), Section B Q1 corrective:
+    #   Phase 7 must predicate emission on `phase_N.status == 'passed'`.
+    # WIKI-ACTION: hard-gate emission. Refuse to emit (raise) if any required
+    #   phase has status != 'passed'. Operator-side EXEMPT via env var, with
+    #   reason captured for audit trail.
+    _assert_emission_prerequisites(state)
     rendered = _render_report(state)
 
     run_dir = Path(state["run_dir"])
@@ -42,6 +70,74 @@ def phase_7_report(state: dict) -> dict:
 
     state["phase_7_complete"] = True
     return state
+
+
+def _assert_emission_prerequisites(state: dict) -> None:
+    """Refuse to emit a report when prior audit phases are not 'passed'.
+
+    # WIKI-CONSULTED: silent-staleness#data-level-freshness-check
+    # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
+    # WIKI-CONSULTED: function-replacement-convention
+    # WIKI-CONSULTED: wiki-to-code-traceability#triple-marker-convention
+    # WIKI-FINDING: silent-staleness pattern says 'Data fetch fails → fallback
+    #   to cache → build output from stale data → user trusts output → makes
+    #   decisions on outdated information'. Phase 7's prior 'always emit' code
+    #   was the same anti-pattern at LLM-output level: audit fails → fallback
+    #   verdict → build report from incomplete state → user trusts report →
+    #   acts on a degraded forensic. Per the wiki page, the fix is to refuse
+    #   emission rather than to ship with a warning.
+    # WIKI-ACTION: hard-gate emission. Refuse to emit (raise) if any required
+    #   phase has status != 'passed'. Operator-side EXEMPT via env var, with
+    #   reason captured for audit trail (per feature-flag emergency-bypass
+    #   pattern: kill-switch is permanent, defaults to enforced, requires
+    #   explicit operator action with documented reason to bypass).
+
+    Implements the Q1 corrective from ecosystem 8D 2026-04-25
+    (run-1777092777-6e277c0c). The earlier silent-emission failure mode
+    let Phase 7 produce reports on top of fallback audits, with the
+    failure smuggled into the report as a self-exonerating warning sentence.
+    This refuses at the structural boundary instead.
+    """
+    bypass = os.environ.get("EIGHTD_EMIT_DESPITE_FAILED_AUDITS") == "1"
+    bypass_reason = os.environ.get("EIGHTD_EMIT_DESPITE_FAILED_AUDITS_REASON", "")
+
+    failed: list[str] = []
+    for phase_key in ("phase_3_status", "phase_5_status"):
+        status = state.get(phase_key)
+        if status is None:
+            # Older runs / partial state lack the field; treat as legacy and
+            # allow (those runs predate the corrective). Tag for the operator.
+            state.setdefault("phase_7_legacy_emission", []).append(
+                f"{phase_key} missing (pre-2026-04-25 run)"
+            )
+            continue
+        if status != "passed":
+            failed.append(f"{phase_key}={status}")
+
+    if not failed:
+        return
+
+    if bypass:
+        state.setdefault("phase_7_bypassed_failures", []).extend(failed)
+        state["phase_7_bypass_reason"] = bypass_reason or "(no reason given)"
+        import sys
+        sys.stderr.write(
+            f"[phase_7] WARNING: EIGHTD_EMIT_DESPITE_FAILED_AUDITS=1 set; "
+            f"emitting despite {failed}. Reason: {state['phase_7_bypass_reason']}\n"
+        )
+        return
+
+    raise PrerequisiteRefusedError(
+        f"Refusing to emit Phase 7 report: prerequisite phase(s) did not pass: "
+        f"{', '.join(failed)}. The earlier audit phase(s) used the _fallback "
+        f"path (LLM error or no real audit). Per ecosystem-wide degraded-"
+        f"emission-with-warning anti-pattern (8D 2026-04-25), reports must not "
+        f"ship on top of failed audits with a self-exonerating warning. "
+        f"Re-run the failed phase(s), or set "
+        f"EIGHTD_EMIT_DESPITE_FAILED_AUDITS=1 with reason in "
+        f"EIGHTD_EMIT_DESPITE_FAILED_AUDITS_REASON if you have an explicit "
+        f"operator-side justification."
+    )
 
 
 def _canonical_report_path(state: dict) -> Path:

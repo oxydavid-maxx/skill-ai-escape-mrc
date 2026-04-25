@@ -64,7 +64,18 @@ def phase_5_prevention_audit(state: dict) -> dict:
             break
 
     state["phase_5_residual_risks"] = residual
+    # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
+    # WIKI-CONSULTED: function-replacement-convention
+    # WIKI-FINDING: same hardcoded "EXHAUSTED regardless" defect as phase_3;
+    #   ecosystem 8D 2026-04-25 documented as instance #3 of degraded-emission-
+    #   with-warning anti-pattern.
+    # WIKI-ACTION: track failed-fallback rounds; surface as phase_5_status so
+    #   Phase 7 emit can predicate on it.
+    has_fallback_round = any(
+        isinstance(r, dict) and r.get("_fallback") for r in state["phase_5_rounds"]
+    )
     state["phase_5_verdict"] = "EXHAUSTED"
+    state["phase_5_status"] = "failed" if has_fallback_round else "passed"
     state["phase_5_complete"] = True
     return state
 

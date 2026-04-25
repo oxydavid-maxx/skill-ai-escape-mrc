@@ -69,7 +69,22 @@ def phase_3_rc_audit(state: dict) -> dict:
             break
 
     state["phase_3_residual_risks"] = residual
-    state["phase_3_verdict"] = "EXHAUSTED"  # always proceed after 3 rounds
+    # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
+    # WIKI-CONSULTED: function-replacement-convention
+    # WIKI-FINDING: prior code hardcoded `state["phase_3_verdict"] = "EXHAUSTED"`
+    #   regardless of whether rounds ran normally or fell back due to LLM errors.
+    #   This let Phase 7 emit reports on top of fundamentally incomplete audits
+    #   ("EXHAUSTED with fallback" warning shipped instead of refused) — exact
+    #   ecosystem-wide degraded-emission-with-warning anti-pattern documented in
+    #   8D run-1777092777-6e277c0c (2026-04-25), Section B Q1 corrective.
+    # WIKI-ACTION: distinguish PASSED (rounds ran naturally) vs FAILED (any
+    #   round used the _fallback path due to LLM/parse error). Phase 7 must
+    #   predicate emission on phase_3_status == "passed"; otherwise refuse.
+    has_fallback_round = any(
+        isinstance(r, dict) and r.get("_fallback") for r in state["phase_3_rounds"]
+    )
+    state["phase_3_verdict"] = "EXHAUSTED"
+    state["phase_3_status"] = "failed" if has_fallback_round else "passed"
     state["phase_3_complete"] = True
     return state
 
