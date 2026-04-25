@@ -59,6 +59,26 @@ class EightDState(TypedDict, total=False):
     email_sent: bool
     email_delivery_log: Optional[str]
 
+    # Phase 8: collect actions for SDK auto-dispatch
+    phase_8_complete: bool
+    actions_path: Optional[str]
+    actions_count: int
+
+    # Phase 9: SDK dispatch → writing-plans
+    phase_9_complete: bool
+    plan_path: Optional[str]
+    phase_9_error: Optional[str]
+
+    # Phase 10: emit gate file + email + interrupt for approval
+    phase_10_complete: bool
+    approval: Optional[dict]
+
+    # Phase 11: SDK dispatch → executing-plans (skipped if rejected)
+    phase_11_complete: bool
+    phase_11_skipped: bool
+    phase_11_skip_reason: Optional[str]
+    phase_11_returncode: Optional[int]
+
     # Metadata
     models_used: dict
     api_call_count: int
