@@ -14,12 +14,23 @@ RUNS_DIR = Path(__file__).parent / "runs"
 RUN_RETENTION_DAYS = 30
 
 
+def _isonow():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
 def main():
     ap = argparse.ArgumentParser(prog="run_8d")
     ap.add_argument("problem", nargs="?", help="Problem description")
     ap.add_argument("--resume", dest="resume_id")
     ap.add_argument("--gc", action="store_true", help="Clean runs older than 30d")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--approve", action="store_true",
+                    help="Resume an interrupted run with approval payload")
+    ap.add_argument("--reject", metavar="REASON",
+                    help="Resume an interrupted run with rejection payload")
+    ap.add_argument("--status", action="store_true",
+                    help="Show pending-approval state without resuming")
     args = ap.parse_args()
 
     if args.gc:
@@ -31,6 +42,50 @@ def main():
 
     run_id = args.resume_id or f"run-{int(time.time())}-{uuid.uuid4().hex[:8]}"
     run_dir = RUNS_DIR / run_id
+
+    # --approve / --reject / --status: approval-gate resume path
+    if args.resume_id and (args.approve or args.reject or args.status):
+        import json as _json
+        from langgraph.types import Command
+        gate = Path.home() / ".claude" / ".pending-8d-approvals" / f"{args.resume_id}.json"
+
+        if args.status:
+            if not gate.exists():
+                print(f"No pending approval for {args.resume_id}")
+                return 0
+            print(gate.read_text(encoding="utf-8"))
+            return 0
+
+        # Validate gate file and build resume payload
+        if args.approve:
+            if not gate.exists():
+                print(f"ERROR: gate file missing: {gate}", file=sys.stderr)
+                return 1
+            doc = _json.loads(gate.read_text(encoding="utf-8"))
+            # Flip gate to {approved: true, via: cli} for portal symmetry
+            doc.update({"approved": True, "approved_at": _isonow(), "via": "cli"})
+            gate.write_text(_json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
+            resume_payload = {"approved": True, "via": "cli"}
+        else:  # --reject
+            resume_payload = {
+                "approved": False,
+                "rejected": True,
+                "rejected_reason": args.reject,
+                "via": "cli",
+            }
+
+        db_path = (RUNS_DIR / args.resume_id) / "checkpoint.db"
+        with SqliteSaver.from_conn_string(str(db_path)) as checkpointer:
+            graph = build_graph(checkpointer=checkpointer)
+            config = {"configurable": {"thread_id": args.resume_id, "recursion_limit": 100}}
+            final_state = graph.invoke(Command(resume=resume_payload), config=config)
+        if final_state.get("phase_11_complete"):
+            # Cleanup gate file on successful execution
+            if gate.exists():
+                gate.unlink()
+            return 0
+        return 2
+
     run_dir.mkdir(parents=True, exist_ok=True)
 
     db_path = run_dir / "checkpoint.db"
