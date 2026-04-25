@@ -52,6 +52,90 @@ def send_8d_report_email(report_md: str, report_path: Path, problem_summary: str
         raise RuntimeError(msg)
 
 
+def send_consolidated_email(
+    report_path: str,
+    plan_path: str,
+    run_id: str,
+    mailto_url: str,
+) -> bool:
+    """Send a single email containing report summary + plan + approval portal.
+
+    Returns True on success, False otherwise. Errors are logged but not raised
+    (best-effort per spec 2026-04-25-sdk-auto-dispatch-design.md — gate file is
+    the source of truth; email is a convenience portal).
+
+    # WIKI-CONSULTED: function-replacement-convention#delete-in-same-commit
+    # WIKI-FINDING: phase_7 email-send removed in same commit as graph rewiring
+    #   to avoid dual-emission window (coexistence = latent bug).
+    # WIKI-ACTION: this function IS the consolidated replacement — single email
+    #   containing report + plan + both approval portals.
+    """
+    from pathlib import Path as _Path
+    try:
+        report = _Path(report_path).read_text(encoding="utf-8") if _Path(report_path).exists() else ""
+        plan = _Path(plan_path).read_text(encoding="utf-8") if _Path(plan_path).exists() else ""
+    except Exception as e:
+        print(f"[send_consolidated_email] read error: {e}")
+        return False
+
+    plan_first_50 = "\n".join(plan.splitlines()[:50])
+    plan_truncated = "..." if len(plan.splitlines()) > 50 else ""
+    report_truncated = "..." if len(report) > 2000 else ""
+    body_md = f"""# 8D Run {run_id} — Approval Pending
+
+## Report
+{report_path}
+
+{report[:2000]}
+{report_truncated}
+
+## Plan (auto-generated via superpowers:writing-plans)
+{plan_path}
+
+```
+{plan_first_50}
+{plan_truncated}
+```
+
+## To approve
+Reply to this email with subject: `APPROVE {run_id}`
+
+Or in your next Claude Code session, type: `approve {run_id}`
+
+## To reject
+Reply with subject: `REJECT {run_id}`
+
+Or type in session: `reject {run_id}`
+"""
+    try:
+        return send_markdown_email(
+            subject=f"[8D APPROVAL PENDING] Run {run_id}",
+            body_md=body_md,
+        )
+    except Exception as e:
+        print(f"[send_consolidated_email] WARN: send_markdown_email not available or failed: {e}; gate file is the source of truth")
+        return False
+
+
+def send_markdown_email(subject: str, body_md: str) -> bool:
+    """Send a markdown-body email via Outlook COM.
+
+    Returns True on success, False otherwise. Introduced as a general-purpose
+    helper for send_consolidated_email (and future callers).
+    """
+    html_body = _md_to_html(body_md)
+    recipient = _get_recipient()
+    try:
+        _send_outlook(recipient, subject, html_body, None, attach=False)
+        _log_delivery("outlook_markdown", f"OK: sent to {recipient}", recipient)
+        return True
+    except Exception as e:
+        err = f"{type(e).__name__}: {e}"
+        _log_delivery("outlook_markdown_failed", err, recipient)
+        print(f"[send_markdown_email] Outlook failed: {err}")
+        return False
+
+
 def _normalize_attachment_path(report_path: Path) -> Path:
     """Resolve path, verify existence + non-empty, return canonical Windows form."""
     p = Path(report_path).resolve()
