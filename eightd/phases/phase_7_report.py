@@ -58,12 +58,21 @@ def _render_report(state: dict) -> str:
     template_path = Path(__file__).parent.parent.parent / "templates" / "8d_report_template.md"
     template = template_path.read_text(encoding="utf-8") if template_path.exists() else ""
 
+    # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
+    # WIKI-FINDING: 600s default sdk_client timeout caused every Phase 7 on a
+    #   complex problem to TimeoutError after 10 min (observed 2026-04-25 on two
+    #   separate runs both with 123K-token input prompts). All Phase 0-6 work is
+    #   preserved in checkpoint.db but no report emitted.
+    # WIKI-ACTION: pass timeout_sec=1800 (30 min) for the report-render call. Matches
+    #   Anthropic API docs' 60-min inference default, halved for earlier stall signal.
+    #   Other phases still use the 600s default from sdk_client.call_claude.
     rendered = call_claude(
         model=model_for_role("report_generation"),
         system=load_prompt("report_render") + "\n\nTemplate to follow:\n" + template,
         user=json.dumps(_state_summary(state), ensure_ascii=False),
         max_tokens=8000,
         purpose="phase_7_report_render",
+        timeout_sec=1800,
     )
     return rendered
 

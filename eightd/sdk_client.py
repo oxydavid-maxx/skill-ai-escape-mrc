@@ -227,7 +227,16 @@ def call_claude(
     purpose: str = "unknown",
     allow_tools: bool = False,
     json_schema: dict | None = None,
+    timeout_sec: int = 600,
 ):
+    # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
+    # WIKI-FINDING: 600s default is fine for short-prompt phases; phase_7_report's
+    #   123K-token input prompt + large markdown output consistently exceeds 10 min
+    #   and crashes with TimeoutError, producing no report despite Phases 0-6 being
+    #   complete. Anthropic API default is 60 min; our 10 min was arbitrary.
+    # WIKI-ACTION: made timeout per-call overridable; phase_7_report.py now passes
+    #   timeout_sec=1800 (30 min) for the report-render call while other phases
+    #   keep the 600s default.
     """Call Claude via the Agent SDK. Drop-in replacement for the legacy
     anthropic_client.call_claude.
 
@@ -252,7 +261,7 @@ def call_claude(
         prompt=user,
         system_prompt=system.rstrip(),
         schema=json_schema,
-        timeout_sec=600,
+        timeout_sec=timeout_sec,
         max_turns=3,
     ))
 
