@@ -8,8 +8,6 @@ from pathlib import Path
 from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
 from eightd.utils import load_prompt, sluggify
-from eightd.delivery.email import send_8d_report_email
-
 URL_RE = re.compile(r"https?://[^\s)\"']+")
 
 
@@ -56,17 +54,12 @@ def phase_7_report(state: dict) -> dict:
 
     state["closure_audit"] = _run_closure_audit(state)
 
-    try:
-        log = send_8d_report_email(
-            report_md=rendered,
-            report_path=canonical,
-            problem_summary=state["problem"][:200],
-        )
-        state["email_sent"] = True
-        state["email_delivery_log"] = log
-    except Exception as e:
-        state["email_sent"] = False
-        state["email_delivery_log"] = f"FAIL: {type(e).__name__}: {e}"
+    # Email-send migrated to phase_10_emit_and_wait per spec
+    # 2026-04-25-sdk-auto-dispatch-design.md (single consolidated email
+    # with report + plan + approval portal).
+    # Per function-replacement-convention wiki: WIKI-CONSULTED: function-replacement-convention
+    # WIKI-FINDING: "later means never" — coexistence creates dual-function silent failure.
+    # WIKI-ACTION: email-send removed here in same commit as phase_10 wiring (no dual-emission window).
 
     state["phase_7_complete"] = True
     return state

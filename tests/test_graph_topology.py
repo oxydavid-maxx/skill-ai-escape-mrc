@@ -13,6 +13,8 @@ def test_graph_has_all_phase_nodes():
         "phase_3_rc_audit", "phase_4_actions",
         "phase_5_prevention_audit",
         "phase_6_verification", "phase_7_report",
+        "phase_8_collect_actions", "phase_9_write_plan",
+        "phase_10_emit_and_wait", "phase_11_execute",
     }
     nodes = set(g.get_graph().nodes.keys())
     assert expected_nodes.issubset(nodes)
