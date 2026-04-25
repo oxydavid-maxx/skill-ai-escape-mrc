@@ -1,6 +1,7 @@
-"""Progress logging — visible heartbeat every LLM call + stall detection.
+"""Per-event progress logging for 8D runs.
 
-Writes JSONL progress events to runs/<run_id>/progress.jsonl. Each event:
+Writes one JSONL record to runs/<run_id>/progress.jsonl for every LLM call and
+phase transition. Each event:
 {
   "ts": float,
   "phase": "phase_0_research" | ...,
@@ -11,7 +12,17 @@ Writes JSONL progress events to runs/<run_id>/progress.jsonl. Each event:
   "total_elapsed_sec": float
 }
 
-An external monitor can tail this file to report every 10 min.
+Also tees each event to stderr for live tailing.
+
+**Aggregated human-readable progress** is emitted separately by `eightd.heartbeat`,
+which starts a daemon thread at run_8d.py launch and prints a single-line summary
+every 5 min (plus stall warnings at 10 min without a new event). This module only
+records the raw events; heartbeat aggregates them.
+
+Historical note: prior docstring promised 'an external monitor can tail this file'
+— that monitor was never built, leaving users blind to long-run progress for
+multiple weeks. Replaced 2026-04-25 with the built-in heartbeat thread per
+~/.claude/feedback_skill_progress_reporting.md.
 """
 import json
 import os

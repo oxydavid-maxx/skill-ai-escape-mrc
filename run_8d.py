@@ -39,12 +39,27 @@ def main():
         print(f"Would invoke graph with run_id={run_id}")
         return 0
 
-    # Init progress logging (emits heartbeat events to run_dir/progress.jsonl)
+    # Init progress logging (emits per-event records to run_dir/progress.jsonl)
     try:
         from eightd import progress as _progress
         _progress.init(run_dir)
     except Exception:
         pass
+
+    # Start the heartbeat daemon thread. Emits a human-readable progress summary
+    # every HEARTBEAT_INTERVAL_SEC (default 300s) to stderr and optionally to the
+    # Telegram diagnostics topic. Satisfies the requirement in
+    # ~/.claude/feedback_skill_progress_reporting.md that long-running skills
+    # (>10 min) surface intermediate progress every 5-10 min.
+    # WIKI-CONSULTED: wiki-to-code-traceability#triple-marker-convention
+    # WIKI-FINDING: progress.py docstring promised an external monitor never built
+    # WIKI-ACTION: replaced with built-in heartbeat thread at process init
+    try:
+        from eightd import heartbeat as _heartbeat
+        _heartbeat.start(run_dir, run_id)
+    except Exception as e:
+        import sys
+        sys.stderr.write(f"[run_8d] WARN: heartbeat failed to start: {e}\n")
 
     with SqliteSaver.from_conn_string(str(db_path)) as checkpointer:
         graph = build_graph(checkpointer=checkpointer)
