@@ -1,6 +1,8 @@
 ---
 name: skill-8d-mrc
+# WIKI-EXEMPT: backfill execution_mode per surface-acceptance charter — no wiki-governed pattern
 description: Use when debugging recurring problems, doing post-mortem analysis, or when a fix didn't prevent recurrence. Triggers on root cause analysis, 8D, post-mortem, why did this happen again, non-conformance, escape analysis, prevention action, corrective action, proof of action. LangGraph FSM-driven — Phase 0 (dual-tier research), Phase 3/5/7 SoA audits, three 4-quadrant matrices (Root Cause + Corrective + Proof of Action), email delivery.
+execution_mode: both
 ---
 
 # 8D MRC — LangGraph-driven
