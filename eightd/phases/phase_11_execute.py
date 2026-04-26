@@ -41,7 +41,9 @@ def phase_11_execute(state: dict) -> dict:
         "--run-id", run_id,
         "--plan-path", plan_path,
     ]
-    proc = subprocess.Popen(cmd, env=child_env, stderr=subprocess.PIPE)
+    # stderr inherits parent's — see phase_9_write_plan.py comment for the
+    # subprocess.PIPE+wait() deadlock rationale (ecosystem 8D 2026-04-26).
+    proc = subprocess.Popen(cmd, env=child_env)
     proc.wait()
 
     return {

@@ -33,12 +33,17 @@ def phase_9_write_plan(state: dict) -> dict:
         "--actions-path", actions_path,
         "--plan-path", str(plan_path),
     ]
-    proc = subprocess.Popen(cmd, env=child_env, stderr=subprocess.PIPE)
+    # stderr inherits parent's (no PIPE) — child's stderr flows to parent's
+    # stderr where heartbeat also writes, giving real-time visibility AND
+    # avoiding the classic Popen+PIPE+wait() deadlock when child's stderr
+    # exceeds the OS pipe buffer (~64KB on Windows). Per ecosystem 8D
+    # 2026-04-26 diagnostic.
+    proc = subprocess.Popen(cmd, env=child_env)
     proc.wait()
 
     if proc.returncode != 0:
         # Retry once
-        proc2 = subprocess.Popen(cmd, env=child_env, stderr=subprocess.PIPE)
+        proc2 = subprocess.Popen(cmd, env=child_env)
         proc2.wait()
         if proc2.returncode != 0:
             return {"plan_path": str(plan_path), "phase_9_complete": False,
