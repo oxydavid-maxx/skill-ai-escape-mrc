@@ -1,17 +1,23 @@
 ﻿"""Tests for trigger_8d.py -- Managed Agents orchestrator.
 
-Tests mock the external HTTP layer (requests) and the email sender.
+Tests mock the anthropic SDK and email sender.
 No live API calls, no file-system side effects beyond tmp_path.
-
-WIKI-CONSULTED: degraded-emission-with-warning#fail-closed
-WIKI-FINDING: handle_session_complete must raise ValidationError before writing any artifact
-WIKI-ACTION: test_payload_schema_error_writes_no_artifacts verifies the fail-closed contract
 """
+# WIKI-CONSULTED: function-replacement-convention#The-Convention
+# WIKI-FINDING: old tests patching trigger_8d.requests (requests.post schema) are contradictory
+#   to the new SDK implementation; leaving them would assert a wrong contract — the dual-function
+#   latent bug FRC warns about. Must be replaced in the same edit.
+# WIKI-ACTION: test_create_cloud_session_* rewritten to mock _get_client (SDK) not requests.post;
+#   assert sessions.create uses {agent: {id,type}, environment_id} not {agent_id, input}.
+# WIKI-CONSULTED: degraded-emission-with-warning#fail-closed
+# WIKI-FINDING: handle_session_complete must raise ValidationError before writing any artifact
+# WIKI-ACTION: test_payload_schema_error_writes_no_artifacts verifies the R13 fail-closed contract
 from __future__ import annotations
 import json, os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 import pytest
+import anthropic
 
 from trigger_8d import (
     create_cloud_session,
@@ -56,31 +62,72 @@ def _valid_payload(report_lines: int = 200, plan_lines: int = 100) -> dict:
 # create_cloud_session
 # ---------------------------------------------------------------------------
 
-def test_create_cloud_session_returns_session_id():
-    """create_cloud_session parses session_id from the POST response body."""
-    mock_resp = MagicMock()
-    mock_resp.json.return_value = {"session_id": "sess-abc123"}
-    mock_resp.raise_for_status.return_value = None
+# WIKI-CONSULTED: function-replacement-convention#The-Convention
+# WIKI-FINDING: old tests patched trigger_8d.requests.post with {agent_id,input} body —
+#   wrong contract after SDK rewrite; leaving them asserts a dead schema.
+# WIKI-ACTION: replaced with SDK-mocking tests asserting sessions.create({agent,environment_id}).
 
-    with patch("trigger_8d.requests.post", return_value=mock_resp) as mock_post:
+def _make_mock_client(session_id: str = "sess-abc123"):
+    """Build a mock anthropic.Anthropic client for Managed Agents tests."""
+    mock_client = MagicMock()
+    mock_agent = MagicMock()
+    mock_agent.id = "agent-mocked-id"
+    mock_agent.name = "skill-8d-mrc-v1"
+    agents_page = MagicMock()
+    agents_page.__iter__ = MagicMock(return_value=iter([mock_agent]))
+    mock_client.beta.agents.list.return_value = agents_page
+    mock_client.beta.agents.create.return_value = mock_agent
+    mock_env = MagicMock()
+    mock_env.id = "env-mocked-id"
+    mock_env.name = "skill-8d-mrc-env"
+    envs_page = MagicMock()
+    envs_page.__iter__ = MagicMock(return_value=iter([mock_env]))
+    mock_client.beta.environments.list.return_value = envs_page
+    mock_session = MagicMock()
+    mock_session.id = session_id
+    mock_client.beta.sessions.create.return_value = mock_session
+    mock_client.beta.sessions.events.send.return_value = MagicMock()
+    return mock_client
+
+
+def test_create_cloud_session_returns_session_id():
+    """create_cloud_session uses SDK sessions.create+events.send; returns session_id.
+
+    Correct schema: agent={"id":..,"type":"agent"} + environment_id.
+    Old wrong schema {agent_id, input} returns HTTP 400 "Extra inputs not permitted".
+    """
+    mock_client = _make_mock_client(session_id="sess-abc123")
+
+    with patch("trigger_8d._get_client", return_value=mock_client), \
+         patch("trigger_8d._load_system_prompt", return_value="# system prompt"):
         sid = create_cloud_session("Test problem", "skill-8d-mrc-v1", "key-xyz")
 
     assert sid == "sess-abc123"
-    call_kwargs = mock_post.call_args
-    assert "anthropic-beta" in call_kwargs.kwargs["headers"]
-    assert "managed-agents" in call_kwargs.kwargs["headers"]["anthropic-beta"]
-    assert call_kwargs.kwargs["json"]["agent_id"] == "skill-8d-mrc-v1"
-    assert call_kwargs.kwargs["json"]["input"] == "Test problem"
+    create_kwargs = mock_client.beta.sessions.create.call_args.kwargs
+    assert "agent" in create_kwargs
+    assert create_kwargs["agent"]["type"] == "agent"
+    assert "environment_id" in create_kwargs
+    assert "agent_id" not in create_kwargs   # old wrong field
+    assert "input" not in create_kwargs       # old wrong field
+    send_call = mock_client.beta.sessions.events.send.call_args
+    assert send_call is not None
+    events = send_call.kwargs.get("events", [])
+    msg = next((e for e in events if isinstance(e, dict) and e.get("type") == "user.message"), None)
+    assert msg is not None
+    assert any("Test problem" in b.get("text", "") for b in msg["content"] if isinstance(b, dict))
 
 
-def test_create_cloud_session_propagates_http_error():
-    """create_cloud_session lets requests exceptions propagate (caller handles them)."""
-    import requests as req_mod
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status.side_effect = req_mod.HTTPError("403 Forbidden")
-
-    with patch("trigger_8d.requests.post", return_value=mock_resp):
-        with pytest.raises(req_mod.HTTPError):
+def test_create_cloud_session_propagates_sdk_error():
+    """SDK AuthenticationError propagates out of create_cloud_session."""
+    mock_client = _make_mock_client()
+    mock_client.beta.sessions.create.side_effect = anthropic.AuthenticationError(
+        message="bad key",
+        response=MagicMock(status_code=401),
+        body={"error": {"message": "bad key"}},
+    )
+    with patch("trigger_8d._get_client", return_value=mock_client), \
+         patch("trigger_8d._load_system_prompt", return_value="# sys"):
+        with pytest.raises(anthropic.AuthenticationError):
             create_cloud_session("problem", "agent", "bad-key")
 
 
