@@ -113,7 +113,11 @@ def main():
         from eightd import heartbeat as _heartbeat
         _heartbeat.start(run_dir, run_id)
     except Exception as e:
-        import sys
+        # WIKI-CONSULTED: function-replacement-convention#The-Convention
+        # WIKI-FINDING: Local import inside except block shadows module-level import,
+        #   making Python treat 'sys' as local throughout main(); all later sys.stderr
+        #   references fail with UnboundLocalError on code paths that skip this block.
+        # WIKI-ACTION: Removed local 'import sys'; module-level import (line 4) is used.
         sys.stderr.write(f"[run_8d] WARN: heartbeat failed to start: {e}\n")
 
     with SqliteSaver.from_conn_string(str(db_path)) as checkpointer:
