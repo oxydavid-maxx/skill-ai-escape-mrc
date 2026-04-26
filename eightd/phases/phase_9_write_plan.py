@@ -32,8 +32,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+# WIKI-CONSULTED: silent-staleness#three-layer-defense
+# WIKI-FINDING: Phase 9 can silently emit a too-short/incomplete plan.md that looks
+#   like success but breaks Phase 10 gate content — layer 2 defense is output
+#   validation before the FSM transitions.
+# WIKI-ACTION: validate_phase9_plan() called after every call_claude() write;
+#   raises Phase9OutputContractError on failure for fail-closed routing (R13).
 from eightd.sdk_client import call_claude
 from eightd.models import model_for_role
+from eightd.validators import validate_phase9_plan
 
 
 SYSTEM_PROMPT = """You are an implementation-plan author. Convert the structured \
@@ -87,5 +94,9 @@ def phase_9_write_plan(state: dict) -> dict:
         timeout_sec=900,
     )
 
+    # WIKI-CONSULTED: silent-staleness#output-validation
+    # WIKI-FINDING: write + validate in same step; never transition FSM on unvalidated output.
+    # WIKI-ACTION: validate_phase9_plan raises Phase9OutputContractError before return.
     plan_path.write_text(plan_md, encoding="utf-8")
+    validate_phase9_plan(plan_path)
     return {"plan_path": str(plan_path), "phase_9_complete": True}

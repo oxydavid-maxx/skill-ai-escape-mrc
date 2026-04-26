@@ -30,9 +30,18 @@ def test_invokes_call_claude_and_writes_plan(tmp_path):
 
     captured = {}
 
+    # WIKI-EXEMPT: test fixture update — validator now requires >500 bytes + ## Task marker
+    # Return a stub that satisfies validate_phase9_plan() contract (>500 bytes, has ## Task).
+    _STUB_SUFFIX = ("- [ ] **Step N: Do something concrete.**\n" * 20)
+
     def fake_call_claude(**kwargs):
         captured.update(kwargs)
-        return "# Plan stub from mocked LLM\n\n## Task 1: Fix corrective issue A\n"
+        return (
+            "# Plan stub from mocked LLM\n\n"
+            "## Task 1: Fix corrective issue A\n\n"
+            "**Files:** eightd/graph.py\n\n"
+            + _STUB_SUFFIX
+        )
 
     with patch("eightd.phases.phase_9_write_plan.call_claude", side_effect=fake_call_claude):
         result = phase_9_write_plan(state)
@@ -56,7 +65,14 @@ def test_empty_actions_still_invokes_llm(tmp_path):
     state = {"run_id": "run-empty", "run_dir": str(tmp_path),
              "actions_path": str(tmp_path / "actions.json")}
 
-    with patch("eightd.phases.phase_9_write_plan.call_claude", return_value="# Empty plan\n") as mock_call:
+    # WIKI-EXEMPT: test fixture update — validator now requires >500 bytes + ## Task marker
+    _EMPTY_STUB = (
+        "# Empty Implementation Plan\n\n"
+        "## Task 1: No actions — review problem statement\n\n"
+        "**Files:** N/A\n\n"
+        + ("- [ ] **Step N: Review and re-run analysis.**\n" * 20)
+    )
+    with patch("eightd.phases.phase_9_write_plan.call_claude", return_value=_EMPTY_STUB) as mock_call:
         result = phase_9_write_plan(state)
 
     assert mock_call.called
