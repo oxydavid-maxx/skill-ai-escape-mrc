@@ -1,52 +1,35 @@
-"""Phase 9 — dispatch a child SDK session via Popen running child_runner.py
-in --mode plan; child invokes superpowers:writing-plans on actions.json.
+"""Phase 9 - deterministic plan generation from structured actions.
 
-Per spec 2026-04-25-sdk-auto-dispatch-design.md.
+Replaces the former subprocess.Popen -> child_runner.py -> superpowers:writing-plans
+dispatch that hung in autonomous mode.
 
-WIKI-CONSULTED: claude-agent-sdk-patterns#issue-573
-WIKI-FINDING: subprocess inherits CLAUDECODE=1; child_runner.py pops it, but
-              Popen env filter is defense-in-depth so env is clean before exec.
-WIKI-ACTION: strip CLAUDECODE and CLAUDE_CODE_ENTRYPOINT from env dict passed
-             to Popen (does not rely solely on child_runner.py's own strip).
+Per escape #8 in ~/.claude/governance/escape_log.yaml (proof 8D run-1777179234).
+User-approved fix: drop Phase 9 LLM/SDK dispatch entirely; generate plan directly
+from the structured actions.json output of phase_8_collect_actions.
+
+WIKI-CONSULTED: function-replacement-convention#delete-in-same-commit
+WIKI-FINDING: Popen dispatch + new template path coexisting = latent dual-emit bug.
+WIKI-ACTION: Popen dispatch deleted in this same commit as _plan_template.py lands.
+            child_runner.py kept intact (phase_11_execute.py still uses --mode execute).
+
+DETECTION: structural-grep - subprocess must not appear in this file (regression guard).
 """
 from __future__ import annotations
-import os
-import subprocess
-import sys
+import json
 from pathlib import Path
+
+from eightd.phases._plan_template import generate_plan
 
 
 def phase_9_write_plan(state: dict) -> dict:
+    """Generate plan.md deterministically from actions.json (no SDK, no Popen)."""
     run_dir = Path(state["run_dir"])
     plan_path = run_dir / "plan.md"
     actions_path = state["actions_path"]
     run_id = state["run_id"]
 
-    # Strip CLAUDECODE from child env (Issue #573 defense-in-depth)
-    child_env = {k: v for k, v in os.environ.items()
-                 if k not in ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT")}
-
-    cmd = [
-        sys.executable, "-m", "eightd.child_runner",
-        "--mode", "plan",
-        "--run-id", run_id,
-        "--actions-path", actions_path,
-        "--plan-path", str(plan_path),
-    ]
-    # stderr inherits parent's (no PIPE) — child's stderr flows to parent's
-    # stderr where heartbeat also writes, giving real-time visibility AND
-    # avoiding the classic Popen+PIPE+wait() deadlock when child's stderr
-    # exceeds the OS pipe buffer (~64KB on Windows). Per ecosystem 8D
-    # 2026-04-26 diagnostic.
-    proc = subprocess.Popen(cmd, env=child_env)
-    proc.wait()
-
-    if proc.returncode != 0:
-        # Retry once
-        proc2 = subprocess.Popen(cmd, env=child_env)
-        proc2.wait()
-        if proc2.returncode != 0:
-            return {"plan_path": str(plan_path), "phase_9_complete": False,
-                    "phase_9_error": f"child exit {proc2.returncode}"}
+    actions = json.loads(Path(actions_path).read_text(encoding="utf-8"))
+    plan_md = generate_plan(actions, run_id)
+    plan_path.write_text(plan_md, encoding="utf-8")
 
     return {"plan_path": str(plan_path), "phase_9_complete": True}
