@@ -129,9 +129,25 @@ def main():
                 "run_dir": str(run_dir),
             }
 
-        final_state = graph.invoke(initial, config=config)
+        try:
+            final_state = graph.invoke(initial, config=config)
+        except Exception as _exc:
+            # GraphInterrupt is raised by interrupt() in phase_10 to pause the
+            # graph for human approval. It is NOT an error — the checkpoint is
+            # persisted and the user resumes via --approve/--reject.
+            from langgraph.errors import GraphInterrupt
+            if isinstance(_exc, GraphInterrupt):
+                print(
+                    f"Awaiting approval for {run_id}. "
+                    f"Use --approve {run_id} or --reject {run_id} '<reason>' to continue.",
+                    file=sys.stderr,
+                )
+                # Checkpoint preserved; do NOT rmtree run_dir.
+                return 0
+            raise
 
-    if final_state.get("phase_7_complete"):
+    if final_state.get("phase_11_complete"):
+        # Full pipeline complete — cleanup checkpoint and run directory.
         report_path = final_state.get("report_path")
         print(report_path)
         shutil.rmtree(run_dir, ignore_errors=True)
