@@ -12,7 +12,7 @@
 #   from heartbeat-loop wall clock; tests construct events with explicit ts so
 #   the boundary check is deterministic.
 # WIKI-ACTION: tests treat _format_heartbeat_line as a pure function (now param
-#   injectable) so behaviour is reproducible and not flake-prone — covers the
+#   injectable) so behaviour is reproducible and not flake-prone ??covers the
 #   format contract AND the stall-threshold ladder in one place.
 
 Covers:
@@ -24,7 +24,7 @@ Covers:
 """
 from __future__ import annotations
 
-from eightd.heartbeat import (
+from ai_escape_mrc.heartbeat import (
     DEFAULT_STALL_THRESHOLD_SEC,
     NEXT_PHASE,
     PHASE_NAMES,
@@ -45,7 +45,7 @@ def _evt(phase: str, event: str, ts: float, total: float = 0.0, **detail) -> dic
 
 
 def test_phase_7_stall_threshold_is_1125s():
-    """Phase 7 typical 750s * 1.5 = 1125s — old static 600s would have false-positived."""
+    """Phase 7 typical 750s * 1.5 = 1125s ??old static 600s would have false-positived."""
     assert _stall_threshold_for("phase_7_report") == 1125
 
 
@@ -60,7 +60,7 @@ def test_unknown_phase_uses_default_threshold():
 
 
 def test_instant_phase_threshold_clamped_to_floor():
-    """Phase 8 typical=1s would yield 1.5s — clamp to 60s floor to prevent false alarms."""
+    """Phase 8 typical=1s would yield 1.5s ??clamp to 60s floor to prevent false alarms."""
     assert _stall_threshold_for("phase_8_collect_actions") == 60
 
 
@@ -122,7 +122,7 @@ def test_all_phases_have_next_edge():
 
 
 def test_unknown_phase_format_does_not_crash():
-    """Heartbeat must never crash on an unknown phase — fallback to raw phase string."""
+    """Heartbeat must never crash on an unknown phase ??fallback to raw phase string."""
     now = 3000.0
     events = [_evt("phase_xx_unknown", "weird_event", ts=now - 30, total=2 * 60)]
     msg, stalled, phase = _format_heartbeat_line("run-X", events, now=now)

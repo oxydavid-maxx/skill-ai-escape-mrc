@@ -4,7 +4,7 @@ The retry loop was removed because it multiplied calls up to 3x for a soft
 constraint the audit can enforce.
 """
 from unittest.mock import patch
-from eightd.phases.phase_2_why_analysis import phase_2_why_analysis
+from ai_escape_mrc.phases.phase_2_why_analysis import phase_2_why_analysis
 
 
 def _make_chain(n_whys):
@@ -22,7 +22,7 @@ def test_phase_2_populates_all_4_quadrants():
         "websearch_specific": [],
         "wiki_pages": [],
     }
-    with patch("eightd.phases.phase_2_why_analysis.call_claude", return_value=_make_chain(10)):
+    with patch("ai_escape_mrc.phases.phase_2_why_analysis.call_claude", return_value=_make_chain(10)):
         result = phase_2_why_analysis(state)
 
     assert result["phase_2_complete"] is True
@@ -40,7 +40,7 @@ def test_phase_2_accepts_short_chain_without_retry():
         call_count["n"] += 1
         return _make_chain(5)  # short
 
-    with patch("eightd.phases.phase_2_why_analysis.call_claude", side_effect=fake):
+    with patch("ai_escape_mrc.phases.phase_2_why_analysis.call_claude", side_effect=fake):
         result = phase_2_why_analysis(state)
 
     # Exactly 4 calls (one per quadrant), NOT 4*3=12 via retry loop.

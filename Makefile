@@ -1,11 +1,11 @@
-# skill-8d-mrc Makefile
+# skill-ai-escape-mrc Makefile
 # WIKI-CONSULTED: silent-staleness#detection-via-content
 # WIKI-FINDING: A make target that doesn't write a fresh evidence file or
 #   exits 0 vacuously reproduces silent-staleness; the audit-closed-loop
 #   target must produce governance/audits/*.json with the actual run trace.
 # WIKI-ACTION: --json-report-file path is fixed (not date-templated) so
 #   re-runs overwrite, and the file's mtime is the staleness signal R17 uses.
-# Source: 8D run-1777208113-4411cfdc Task 2 Step 5.
+# Source: AI Escape MRC run-1777208113-4411cfdc Task 2 Step 5.
 
 .PHONY: audit-closed-loop test
 

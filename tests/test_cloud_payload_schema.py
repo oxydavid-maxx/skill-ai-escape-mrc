@@ -1,7 +1,7 @@
 """Tests for CloudPayload Pydantic schema."""
 import pytest
 from pydantic import ValidationError
-from eightd.managed_agent.output_schema import CloudPayload, ActionItem, PhaseMetadata
+from ai_escape_mrc.managed_agent.output_schema import CloudPayload, ActionItem, PhaseMetadata
 
 
 def _valid_meta():

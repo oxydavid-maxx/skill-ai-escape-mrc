@@ -1,11 +1,11 @@
-"""Tests for phase_8_collect_actions — Phase 4+6 action extraction."""
+"""Tests for phase_8_collect_actions ??Phase 4+6 action extraction."""
 import json
 from pathlib import Path
-from eightd.phases.phase_8_collect_actions import phase_8_collect_actions
+from ai_escape_mrc.phases.phase_8_collect_actions import phase_8_collect_actions
 
 
 def test_extracts_corrective_prevention_verification(tmp_path):
-    """Reads real eightd state shape: corrective_actions / prevention_actions
+    """Reads real ai_escape_mrc state shape: corrective_actions / prevention_actions
     keyed by q1_trc_nc..q4_mrc_nd, plus verification_plan as single dict.
     """
     state = {

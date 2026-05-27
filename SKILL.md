@@ -1,98 +1,168 @@
 ---
-name: skill-8d-mrc
-# WIKI-EXEMPT: backfill execution_mode per surface-acceptance charter — no wiki-governed pattern
-description: Use when debugging recurring problems, doing post-mortem analysis, or when a fix didn't prevent recurrence. Triggers on root cause analysis, 8D, post-mortem, why did this happen again, non-conformance, escape analysis, prevention action, corrective action, proof of action. LangGraph FSM-driven — Phase 0 (dual-tier research), Phase 3/5/7 SoA audits, three 4-quadrant matrices (Root Cause + Corrective + Proof of Action), email delivery.
+name: skill-ai-escape-mrc
+wiki_exempt: backfill execution_mode per surface-acceptance charter; no wiki-governed pattern
+description: Use when reviewing AI harness, agent, CI, or browser/API automation flows that reported success but may have missed verification, renamed entrypoints, plugin links, generated docs, tests, runtime artifacts, delivery artifacts, or other escape paths. Triggers on AI automation escape review, harness escape, automation-flow escape, missed verification, false completion, non-detection, recurrence prevention, corrective action, proof of action, and managerial root cause. LangGraph FSM-driven with research, IS/IS-NOT scoping, four-quadrant TRC/MRC analysis, corrective/prevention matrices, proof-of-action verification, report/plan generation, and email delivery.
 execution_mode: both
+variant_note: Standalone non-discussion variant; Paddy may maintain a separate discussion-oriented variant.
 ---
 
-# 8D MRC — LangGraph-driven
+# AI Escape MRC
 
-This skill runs a FSM-enforced 8D root cause analysis. Phase order and exit
-criteria are enforced by Python code, not markdown.
+Use this skill to review an AI harness or automation workflow that may have
+escaped its own guardrails: it claimed completion, generated artifacts, pushed a
+review, or announced success without proving that entrypoints, plugin links,
+tests, generated documentation, runtime artifact names, and delivery artifacts still
+matched the intended skill identity.
+
+The implementation is a Python/LangGraph finite-state machine. Run the CLI
+entrypoint; do not manually improvise the phases from this document.
+
+> Version note: this standalone copy is the non-discussion AI Escape MRC
+> variant. Paddy may maintain a separate discussion-oriented variant; keep that
+> as a separate skill/version if it is added later.
 
 ## Invocation
 
-When the user asks for 8D analysis, execute via Bash:
+Run the local entrypoint:
 
-    py -3 D:/D-claude/skills/skill-8d-mrc/run_8d.py "<problem description>"
+```powershell
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc.py "<automation escape topic>"
+```
+
+Use `--user-email <email>` when the final report/plan email should go to the
+requester. The operator from `~/.claude/email.json` is copied. If no requester
+email is available, delivery falls back to the operator and the delivery status records
+`recipient_source=operator_fallback`.
+
+For Windows runs that must not open a new console window but should still show
+live output in the current launcher, use:
+
+```powershell
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py "<automation escape topic>" --user-email user@example.com
+```
+
+Add `--detach` only for true fire-and-forget background mode. Detached runs
+cannot print to a visible screen; they write the same summaries to the printed
+stderr log and to `runs/<run_id>/stage-summaries.md/jsonl`.
+
+When you are running this skill from inside a Codex/Claude agent, do not block
+the conversation on a long shell command. Use deterministic watch mode so the
+launcher itself streams the hidden run output back to the active conversation:
+
+```powershell
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py --agent --watch "<automation escape topic>" --user-email user@example.com
+```
+
+Detached agent runs are allowed only when the caller has its own polling loop.
+In that case start with agent metadata, report the returned run id to the user,
+then poll status and paste the human summary back into the chat:
+
+```powershell
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py --agent --detach "<automation escape topic>" --user-email user@example.com
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc.py --status-json "<run_dir from the JSON metadata>"
+```
+
+Poll at least every 60 seconds while the run is active, and immediately report
+phase changes, stall warnings, and completed phase summaries. The user must not
+have to tail logs manually.
 
 Optional flags:
-    --resume <run_id>     Resume an interrupted run
-    --gc                  Clean runs older than 30 days
-    --dry-run             Plan only; do not call Anthropic API
 
-## What the user gets
+- `--resume <run_id>`: resume an interrupted run.
+- `--gc`: clean runs older than 30 days.
+- `--dry-run`: print the planned run id without calling the Anthropic API.
+- `--user-email <email>`: requester delivery target.
+- `--operator-email <email>`: operator CC/fallback override.
+- `--detach`: hidden launcher only; stop streaming logs to the current output.
+- `--agent`: hidden launcher only; start in background and print JSON metadata
+  for agent polling.
+- `--watch`: hidden launcher only; stream hidden child output back to the
+  current output even when `--agent` is used.
+- `--status-json <run_id_or_dir>`: print a machine-readable status snapshot.
+- `--approve` / `--reject <reason>` / `--status`: legacy approval-execution
+  flags; they now report that Phase 11 execution was removed. Use
+  `--status-json` for status.
 
-On success, `run_8d.py` prints the path to the final report on stdout.
-The report is saved at a canonical project location (default:
-`D:/D-claude/skills/skill-8d-mrc/docs/8d-reports/` — reports live in the
-skill's own repo since that's the producer of these artifacts;
-overridable via `CLAUDE_EIGHTD_REPORTS_DIR` env var). The report is also
-emailed to the user via Outlook COM (configured in `~/.claude/email.json`).
+## What The User Gets
 
-Summarize the report for the user. Do not attempt to run phases manually —
-the Python FSM is the only correct implementation.
+During the run, startup and each phase start print immediately to the active
+run output. Each completed phase then prints a brief summary. The same
+summaries are persisted in
+`runs/<run_id>/stage-summaries.md` and included in the final delivery email.
+This is enforced by the Python/LangGraph runtime through visibility receipts;
+if a required phase start, phase summary, or phase error receipt cannot be
+emitted, the run fails closed with a visible `run-error.json` artifact.
 
-## MANDATORY post-completion handoff (foreground execution)
+On success, `run_ai_escape_mrc.py` prints a final delivery block with the
+report path, plan path, stage summaries path, delivery status path, and email
+result. If email delivery fails, the artifacts remain valid and the CLI exits
+non-zero after printing the error and manual fallback.
+Reports default to:
 
-**The 8D run produces design; it does NOT implement that design.** When
-`run_8d.py` exits successfully (Phase 7 complete, report emitted, email
-sent), the orchestrator (this Claude Code session) MUST continue with
-foreground implementation of the report's Phase 4 corrective + prevention
-actions. Do NOT mark the user's task done at email-send.
+```text
+D:/D-claude/skills/skill-ai-escape-mrc/docs/ai-escape-mrc-reports/
+```
 
-Required sequence:
+Override with `CLAUDE_AI_ESCAPE_MRC_REPORTS_DIR`. Email delivery uses requester
+metadata when present and falls back to `~/.claude/email.json` through Outlook
+COM when enabled.
 
-1. **Read** the emitted report at the printed path. Focus on Section B
-   (Corrective Actions Matrix) and Section B2 (Prevention Actions Matrix).
-2. **Invoke `superpowers:executing-plans`** with the report as the plan
-   source. The 8D's Phase 4 IS the plan — no separate `writing-plans`
-   step is needed (the design exists). Pass the report path and the
-   specific quadrants to be implemented.
-3. **executing-plans** internally dispatches to `subagent-driven-
-   development` for any non-trivial implementation work, ensuring R4
-   (process-skip on code Write) fires correctly when subagents touch
-   code files.
-4. **Verify** via `superpowers:verification-before-completion` before
-   reporting the task done. Per `~/.claude/feedback_never_handoff.md`:
-   no completion claim without test evidence.
+Local LangGraph execution uses the active Claude/Codex environment model. Do
+not add hardcoded local model IDs or Anthropic API model-discovery calls.
 
-**Why this split:**
-- skill-8d-mrc is the BACKEND — LangGraph FSM, structured phases,
-  4-quadrant matrices, can run in background (`run_in_background:true`).
-- `superpowers:executing-plans` is the FRONTEND — foreground human-
-  visible implementation with proper pipeline gates (R4 enforces the
-  pipeline; the heartbeat surfaces progress).
-- Backend produces design; frontend implements. Skipping the frontend
-  hand-off is the meta-recurrence of degraded-emission-with-warning
-  (the 8D report ships, but the prevention items never land in code).
+Summarize the emitted report for the user. Do not re-run phases manually; the
+FSM is the source of truth.
 
-**Bypass:** include `EXEMPT post-8d-execution: <reason>` in the prompt
-that triggered the 8D, OR explicitly state "the 8D is for design
-inspection only, no implementation needed." Without an EXEMPT, marking
-the task done after email-send is a R12 verification-evidence violation.
+## Mandatory Post-Completion Handoff
 
-**Persisted as known-failed receipt:** `~/.claude/feedback_skill_progress_reporting.md`
-companion entry; future sessions will see this rule via CLAUDE.md @import
-and skill-rules.json `execute-prevention-actions` keyword trigger.
+The AI Escape MRC run produces diagnosis and implementation design. It does not
+itself land the corrective and prevention changes. After a successful run:
 
-## Architecture (summary)
+1. Read the report path printed by `run_ai_escape_mrc.py`.
+2. Focus on the corrective actions, prevention actions, and proof-of-action
+   sections.
+3. Execute the implementation plan through the foreground planning/execution
+   workflow used by this environment.
+4. Verify with concrete test evidence before claiming completion.
 
-- Python package `eightd/` with LangGraph StateGraph
-- Phase 0: Python-forced dual-tier research (problem-specific + meta/cross-domain)
-- Phase 1: IS/IS NOT
-- Phase 2: Why analysis, ≥10 whys per quadrant (structural enforcement)
-- Phase 3: SoA research + RC audit (must cite ≥2 SoA URLs)
-- Phase 4: Corrective + Prevention actions, 4 quadrants each
-- Phase 5: SoA research + Prevention audit (must cite ≥2 SoA URLs)
-- Phase 6: Verification plan + Proof of Action 4-quadrant matrix
-- Phase 7: SoA research + Report render + Closure audit + Email delivery
+Bypass only when the user explicitly says the run is for design inspection
+only, or includes:
 
-Report contains THREE 4-quadrant matrices: Root Cause, Corrective Actions, Proof of Action.
+```text
+EXEMPT post-ai-escape-mrc-execution: <reason>
+```
 
-## Config
+## Architecture
+
+- Python package: `ai_escape_mrc/`
+- Main entrypoint: `run_ai_escape_mrc.py`
+- Managed-agent trigger: `trigger_ai_escape_mrc.py`
+- Delivery status artifact: `runs/<run_id>/delivery-status.json`
+- Report directory: `docs/ai-escape-mrc-reports`
+- Managed-agent name: `skill-ai-escape-mrc-v1`
+
+Phase outline:
+
+- Phase 0: dual-tier research for the specific escape and comparable patterns.
+- Phase 1: IS/IS-NOT scoping.
+- Phase 2: four-quadrant why analysis across TRC/MRC and NC/ND.
+- Phase 3: root-cause audit with state-of-art evidence checks.
+- Phase 4: corrective and prevention action matrices.
+- Phase 5: prevention audit.
+- Phase 6: proof-of-action verification plan.
+- Phase 7: detailed report rendering and closure audit.
+- Phase 8: action collection.
+- Phase 9: implementation plan generation.
+- Phase 10: final report/plan delivery.
+
+Methodology note: the original lineage borrowed discipline from the 8D problem
+solving method, but the active skill identity, commands, triggers, reports, and
+runtime artifacts are AI Escape MRC.
+
+## Configuration
 
 `~/.claude/email.json`:
+
 ```json
 {
   "recipient": "you@example.com",
@@ -100,8 +170,8 @@ Report contains THREE 4-quadrant matrices: Root Cause, Corrective Actions, Proof
 }
 ```
 
-## Legacy markdown
+Requester/operator env vars:
 
-The original markdown skill (Phase 0-8 instructions for Claude to read and
-follow) is at `SKILL.md.backup-20260420` for reference. Do not follow its
-instructions manually — use `run_8d.py`.
+- `CLAUDE_AI_ESCAPE_MRC_USER_EMAIL`
+- `CLAUDE_AI_ESCAPE_MRC_OPERATOR_EMAIL`
+- `CLAUDE_AI_ESCAPE_MRC_EMAIL` (legacy operator fallback)

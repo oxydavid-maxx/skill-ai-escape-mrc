@@ -13,12 +13,13 @@ from pathlib import Path
 from unittest.mock import patch
 import pytest
 
-from eightd.phases.phase_9_write_plan import phase_9_write_plan
+from ai_escape_mrc.phases.phase_9_write_plan import phase_9_write_plan
+from ai_escape_mrc.validators import FORBIDDEN_LEGACY_IDENTITY_TERMS
 
 
 def _make_action(title, priority="medium", quadrant="corrective:TRC-NC"):
     return {"title": title, "description": f"Fix {title} across the ecosystem",
-            "files_touched": ["eightd/graph.py"], "owner": "kuangyu",
+            "files_touched": ["ai_escape_mrc/graph.py"], "owner": "kuangyu",
             "priority": priority, "source_quadrant": quadrant}
 
 
@@ -30,7 +31,7 @@ def test_invokes_call_claude_and_writes_plan(tmp_path):
 
     captured = {}
 
-    # WIKI-EXEMPT: test fixture update — validator now requires >500 bytes + ## Task marker
+    # WIKI-EXEMPT: test fixture update ??validator now requires >500 bytes + ## Task marker
     # Return a stub that satisfies validate_phase9_plan() contract (>500 bytes, has ## Task).
     _STUB_SUFFIX = ("- [ ] **Step N: Do something concrete.**\n" * 20)
 
@@ -39,11 +40,11 @@ def test_invokes_call_claude_and_writes_plan(tmp_path):
         return (
             "# Plan stub from mocked LLM\n\n"
             "## Task 1: Fix corrective issue A\n\n"
-            "**Files:** eightd/graph.py\n\n"
+            "**Files:** ai_escape_mrc/graph.py\n\n"
             + _STUB_SUFFIX
         )
 
-    with patch("eightd.phases.phase_9_write_plan.call_claude", side_effect=fake_call_claude):
+    with patch("ai_escape_mrc.phases.phase_9_write_plan.call_claude", side_effect=fake_call_claude):
         result = phase_9_write_plan(state)
 
     assert captured["purpose"] == "phase_9_write_plan"
@@ -65,14 +66,14 @@ def test_empty_actions_still_invokes_llm(tmp_path):
     state = {"run_id": "run-empty", "run_dir": str(tmp_path),
              "actions_path": str(tmp_path / "actions.json")}
 
-    # WIKI-EXEMPT: test fixture update — validator now requires >500 bytes + ## Task marker
+    # WIKI-EXEMPT: test fixture update ??validator now requires >500 bytes + ## Task marker
     _EMPTY_STUB = (
         "# Empty Implementation Plan\n\n"
-        "## Task 1: No actions — review problem statement\n\n"
+        "## Task 1: No actions ??review problem statement\n\n"
         "**Files:** N/A\n\n"
         + ("- [ ] **Step N: Review and re-run analysis.**\n" * 20)
     )
-    with patch("eightd.phases.phase_9_write_plan.call_claude", return_value=_EMPTY_STUB) as mock_call:
+    with patch("ai_escape_mrc.phases.phase_9_write_plan.call_claude", return_value=_EMPTY_STUB) as mock_call:
         result = phase_9_write_plan(state)
 
     assert mock_call.called
@@ -81,7 +82,7 @@ def test_empty_actions_still_invokes_llm(tmp_path):
 
 
 def test_no_subprocess_import_in_phase9():
-    phase9_src = Path(__file__).parent.parent / "eightd" / "phases" / "phase_9_write_plan.py"
+    phase9_src = Path(__file__).parent.parent / "ai_escape_mrc" / "phases" / "phase_9_write_plan.py"
     content = phase9_src.read_text(encoding="utf-8")
     code_lines = [l for l in content.splitlines()
                   if not l.strip().startswith('"""')
@@ -95,7 +96,7 @@ def test_no_subprocess_import_in_phase9():
 def test_no_plan_template_import_in_phase9():
     """Per FRC: deterministic template (option b) was replaced by direct LLM (option e).
     Verify the template module is no longer imported."""
-    phase9_src = Path(__file__).parent.parent / "eightd" / "phases" / "phase_9_write_plan.py"
+    phase9_src = Path(__file__).parent.parent / "ai_escape_mrc" / "phases" / "phase_9_write_plan.py"
     content = phase9_src.read_text(encoding="utf-8")
     code_lines = [l for l in content.splitlines()
                   if not l.strip().startswith('"""')
@@ -103,4 +104,11 @@ def test_no_plan_template_import_in_phase9():
                   and not l.strip().startswith("'")]
     code_only = chr(10).join(code_lines)
     assert "_plan_template" not in code_only, "deterministic template regression"
-    assert "from eightd.phases._plan_template" not in code_only
+    assert "from ai_escape_mrc.phases._plan_template" not in code_only
+
+
+def test_phase9_generation_prompt_does_not_embed_forbidden_identity_terms():
+    from ai_escape_mrc.phases.phase_9_write_plan import SYSTEM_PROMPT
+
+    for term in FORBIDDEN_LEGACY_IDENTITY_TERMS:
+        assert term not in SYSTEM_PROMPT

@@ -2,13 +2,13 @@
 """POC: verify claude-agent-sdk-python works with Max OAuth + narrow context + schema enforcement.
 
 Five tests:
-  1. Auth — does the SDK pick up Max OAuth without ANTHROPIC_API_KEY?
-  2. Narrow-scope — does setting_sources=None + system_prompt prevent drift/agent-mode?
-  3. Schema — does output_format json_schema return structured output?
-  4. Nested schema — does it handle a complex IS/IS NOT shape?
-  5. Parallel — can we asyncio.gather 4 queries concurrently?
+  1. Auth ??does the SDK pick up Max OAuth without ANTHROPIC_API_KEY?
+  2. Narrow-scope ??does setting_sources=None + system_prompt prevent drift/agent-mode?
+  3. Schema ??does output_format json_schema return structured output?
+  4. Nested schema ??does it handle a complex IS/IS NOT shape?
+  5. Parallel ??can we asyncio.gather 4 queries concurrently?
 
-Run: py -3 D:/D-claude/skills/skill-8d-mrc/poc/sdk_subagent_probe.py
+Run: py -3 D:/D-claude/skills/skill-ai-escape-mrc/poc/sdk_subagent_probe.py
 """
 import asyncio
 import json
@@ -24,7 +24,7 @@ except Exception as e:
     raise
 
 
-# Issue #573 workaround — clear CLAUDECODE so nested session isn't rejected.
+# Issue #573 workaround ??clear CLAUDECODE so nested session isn't rejected.
 ENV_CLEAN = {"CLAUDECODE": ""}
 
 
@@ -140,7 +140,7 @@ async def test_3_simple_schema() -> dict[str, Any]:
 
 
 async def test_4_nested_schema() -> dict[str, Any]:
-    """Complex IS/IS NOT shape — the kind Phase 1 needs."""
+    """Complex IS/IS NOT shape ??the kind Phase 1 needs."""
     schema = {
         "type": "object",
         "properties": {
@@ -167,14 +167,14 @@ async def test_4_nested_schema() -> dict[str, Any]:
     )
     return await run_query(
         "test_4_nested_schema",
-        "Problem: skill-8d-mrc pipeline runs 79 min inside Claude Code session but 10 min from terminal.",
+        "Problem: skill-ai-escape-mrc pipeline runs 79 min inside Claude Code session but 10 min from terminal.",
         opts,
         timeout_sec=90,
     )
 
 
 async def test_5_parallelism() -> dict[str, Any]:
-    """4 parallel queries via asyncio.gather — Phase 2 four-quadrant pattern."""
+    """4 parallel queries via asyncio.gather ??Phase 2 four-quadrant pattern."""
     quadrants = ["Q1 TRC-NC", "Q2 TRC-ND", "Q3 MRC-NC", "Q4 MRC-ND"]
 
     async def one(q: str) -> dict[str, Any]:

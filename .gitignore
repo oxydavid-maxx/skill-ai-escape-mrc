@@ -10,8 +10,8 @@ __pycache__/
 *.swp
 *.swo
 
-# 8D LLM-generated artifacts (reports + run-specific specs/plans) — too large + auto-regen
-docs/8d-reports/
+# AI Escape MRC LLM-generated artifacts (reports + run-specific specs/plans) ??too large + auto-regen
+docs/ai-escape-mrc-reports/
 docs/superpowers/plans/2026-*-q3-q4-prevention-execution.md
 docs/superpowers/specs/2026-*-q3-q4-prevention-execution-design.md
 docs/superpowers/specs/2026-*-sdk-auto-dispatch-design.md

@@ -1,0 +1,29 @@
+# Anthropic Claude Managed Agents config for skill-ai-escape-mrc.
+# Per spec docs/superpowers/specs/2026-04-26-managed-agents-migration-design.md.
+#
+# WIKI-CONSULTED: function-replacement-convention#delete-in-same-commit
+# WIKI-FINDING: replacing local LangGraph FSM with cloud agent; same commit removes legacy
+# WIKI-ACTION: this yaml is the new authoritative config; legacy graph.py deleted in Phase C.
+
+name: skill-ai-escape-mrc-v1
+description: |
+  AI Escape MRC analyst for ecosystem failure modes.
+  Runs the full 12-phase forensic in a single Managed Agent session;
+  returns structured payload (report, actions, plan) for local persistence.
+
+model: claude-opus-4-6
+
+system_prompt_path: ./system_prompt.md
+
+tools:
+  - type: agent_toolset_20260401
+  - type: websearch_20260401
+
+mcp_servers: []
+
+network_egress:
+  - api.anthropic.com
+  - anthropic.com
+
+# Beta header set automatically by SDK:
+# anthropic-beta: managed-agents-2026-04-01

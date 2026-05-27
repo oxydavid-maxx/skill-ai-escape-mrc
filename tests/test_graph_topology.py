@@ -1,4 +1,4 @@
-from eightd.graph import build_graph
+from ai_escape_mrc.graph import build_graph
 
 
 def test_graph_compiles():
@@ -14,16 +14,25 @@ def test_graph_has_all_phase_nodes():
         "phase_5_prevention_audit",
         "phase_6_verification", "phase_7_report",
         "phase_8_collect_actions", "phase_9_write_plan",
-        "phase_10_emit_and_wait", "phase_11_execute",
+        "phase_10_emit_and_wait",
     }
     nodes = set(g.get_graph().nodes.keys())
     assert expected_nodes.issubset(nodes)
+    assert "phase_11_execute" not in nodes
 
 
 def test_graph_has_no_soa_phase_nodes():
-    """SoA phases deleted — replaced by tool-use websearch inside audits."""
+    """SoA phases deleted ??replaced by tool-use websearch inside audits."""
     g = build_graph()
     nodes = set(g.get_graph().nodes.keys())
     assert "phase_3_soa" not in nodes
     assert "phase_5_soa" not in nodes
     assert "phase_7_soa" not in nodes
+
+
+def test_graph_ends_at_phase_10_final_delivery():
+    graph = build_graph().get_graph()
+    edges = {(edge.source, edge.target) for edge in graph.edges}
+    assert ("phase_9_write_plan", "phase_10_emit_and_wait") in edges
+    assert any(source == "phase_10_emit_and_wait" and target == "__end__" for source, target in edges)
+    assert not any(source == "phase_10_emit_and_wait" and target == "phase_11_execute" for source, target in edges)

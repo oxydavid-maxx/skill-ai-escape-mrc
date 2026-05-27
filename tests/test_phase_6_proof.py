@@ -1,6 +1,6 @@
 from unittest.mock import patch
-from eightd.phases.phase_6_verification import phase_6_verification
-from eightd.state import QUADRANTS
+from ai_escape_mrc.phases.phase_6_verification import phase_6_verification
+from ai_escape_mrc.state import QUADRANTS
 
 
 def test_phase_6_produces_unified_plan_with_4_quadrant_rows():
@@ -24,7 +24,7 @@ def test_phase_6_produces_unified_plan_with_4_quadrant_rows():
             "phase_8_trigger": "next incident",
         }
 
-    with patch("eightd.phases.phase_6_verification.call_claude", side_effect=fake_call) as m:
+    with patch("ai_escape_mrc.phases.phase_6_verification.call_claude", side_effect=fake_call) as m:
         result = phase_6_verification(state)
 
     # Single call (not 4)

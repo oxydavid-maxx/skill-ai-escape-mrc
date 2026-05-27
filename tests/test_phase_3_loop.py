@@ -1,6 +1,6 @@
-"""Phase 3 audit — 3 sequential rounds in one invocation, no outer loop."""
+"""Phase 3 audit ??3 sequential rounds in one invocation, no outer loop."""
 from unittest.mock import patch
-from eightd.phases.phase_3_rc_audit import phase_3_rc_audit, NUM_ROUNDS
+from ai_escape_mrc.phases.phase_3_rc_audit import phase_3_rc_audit, NUM_ROUNDS
 
 
 def _base_state():
@@ -21,7 +21,7 @@ def test_audit_stops_early_on_exhausted():
         calls["n"] += 1
         return {"round": calls["n"], "weaknesses": [], "verdict": "EXHAUSTED"}
 
-    with patch("eightd.phases.phase_3_rc_audit.call_claude", side_effect=fake_call):
+    with patch("ai_escape_mrc.phases.phase_3_rc_audit.call_claude", side_effect=fake_call):
         result = phase_3_rc_audit(_base_state())
 
     assert calls["n"] == 1  # stopped at first EXHAUSTED
@@ -45,7 +45,7 @@ def test_audit_runs_all_3_rounds_when_continue():
             "verdict": "CONTINUE",
         }
 
-    with patch("eightd.phases.phase_3_rc_audit.call_claude", side_effect=fake_call):
+    with patch("ai_escape_mrc.phases.phase_3_rc_audit.call_claude", side_effect=fake_call):
         result = phase_3_rc_audit(_base_state())
 
     assert calls["n"] == NUM_ROUNDS
@@ -66,7 +66,7 @@ def test_audit_collects_residual_risks():
     ]
     it = iter(call_seq)
 
-    with patch("eightd.phases.phase_3_rc_audit.call_claude", side_effect=lambda **kw: next(it)):
+    with patch("ai_escape_mrc.phases.phase_3_rc_audit.call_claude", side_effect=lambda **kw: next(it)):
         result = phase_3_rc_audit(_base_state())
 
     assert len(result["phase_3_residual_risks"]) == 1
@@ -75,7 +75,7 @@ def test_audit_collects_residual_risks():
 
 def test_audit_always_completes_no_rework_verdict():
     """New design: audit always finishes cleanly, never emits REWORK."""
-    with patch("eightd.phases.phase_3_rc_audit.call_claude",
+    with patch("ai_escape_mrc.phases.phase_3_rc_audit.call_claude",
                return_value={"verdict": "CONTINUE", "weaknesses": []}):
         result = phase_3_rc_audit(_base_state())
 

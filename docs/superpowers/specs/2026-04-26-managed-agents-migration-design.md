@@ -76,17 +76,17 @@ trigger_8d.py <problem>
                                         - Phase 9: writing-plans (consolidated into prompt)
                                       Final response = structured payload
                                       Artifacts also written to /workspace
-  
+
   Poll GET /v1/agents/sessions/<id>/events  (every 5 min)
     - filter for phase-complete events
     - post each to Telegram diagnostics topic 63
-  
+
   session.status == "completed"
   ◄──────────────────────────────── {report_md, actions_json, plan_md, phase_metadata}
-  
+
   client.beta.files.list(session_id) + .download(file_id)
     → mirror /workspace artifacts to local runs/<run_id>/
-  
+
   Pydantic strict-mode validation of payload (R13: refuse if malformed)
   writes runs/<run_id>/report.md  (or uses downloaded copy)
   writes runs/<run_id>/actions.json

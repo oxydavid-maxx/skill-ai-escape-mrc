@@ -1,4 +1,4 @@
-"""Structural validation tests for skill-8d-mrc-v1.yaml.
+"""Structural validation tests for skill-ai-escape-mrc-v1.yaml.
 
 Validates the Managed Agents agent definition file has required keys,
 correct model, expected tools, no MCP servers, and a resolvable system prompt.
@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 import yaml
 
-YAML_PATH = Path(__file__).parent.parent / "eightd" / "managed_agent" / "skill-8d-mrc-v1.yaml"
+YAML_PATH = Path(__file__).parent.parent / "ai_escape_mrc" / "managed_agent" / "skill-ai-escape-mrc-v1.yaml"
 YAML_DIR = YAML_PATH.parent
 
 
@@ -33,7 +33,7 @@ def test_required_keys_present():
 
 
 def test_model_is_opus_4_6():
-    """Model must be claude-opus-4-6 (spec requirement for 8D quality)."""
+    """Model must be claude-opus-4-6 (spec requirement for AI Escape MRC quality)."""
     doc = _load_yaml()
     assert doc["model"] == "claude-opus-4-6", f"Unexpected model: {doc["model"]}"
 

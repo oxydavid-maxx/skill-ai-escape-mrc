@@ -1,7 +1,8 @@
 from unittest.mock import patch
 import pytest
 
-from eightd.phases.phase_0_research import phase_0_research
+from ai_escape_mrc.errors import VisibilityContractError
+from ai_escape_mrc.phases.phase_0_research import phase_0_research
 from tests.fixtures.mock_anthropic import make_call_claude_mock, make_websearch_mock
 
 
@@ -22,13 +23,13 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
     (concepts_dir / "silent-staleness.md").write_text("silent staleness content", encoding="utf-8")
 
     monkeypatch.setattr(
-        "eightd.phases.phase_0_research.WIKI_INDEX_PATH", wiki_index,
+        "ai_escape_mrc.phases.phase_0_research.WIKI_INDEX_PATH", wiki_index,
     )
     monkeypatch.setattr(
-        "eightd.phases.phase_0_research.WIKI_CONCEPTS_DIR", concepts_dir,
+        "ai_escape_mrc.phases.phase_0_research.WIKI_CONCEPTS_DIR", concepts_dir,
     )
     monkeypatch.setattr(
-        "eightd.phases.phase_0_research.MEMORY_GLOB",
+        "ai_escape_mrc.phases.phase_0_research.MEMORY_GLOB",
         str(tmp_path / "memory" / "feedback_*.md"),
     )
 
@@ -42,8 +43,8 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
     })
     websearch_mock = make_websearch_mock()
 
-    with patch("eightd.phases.phase_0_research.call_claude", side_effect=call_claude_mock), \
-         patch("eightd.phases.phase_0_research.websearch", side_effect=websearch_mock):
+    with patch("ai_escape_mrc.phases.phase_0_research.call_claude", side_effect=call_claude_mock), \
+         patch("ai_escape_mrc.phases.phase_0_research.websearch", side_effect=websearch_mock):
         result = phase_0_research(dict(base_state))
 
     assert result["phase_0_complete"] is True
@@ -57,20 +58,32 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
 
 def test_phase_0_missing_wiki_does_not_crash(base_state, tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "eightd.phases.phase_0_research.WIKI_INDEX_PATH",
+        "ai_escape_mrc.phases.phase_0_research.WIKI_INDEX_PATH",
         tmp_path / "nonexistent.md",
     )
     monkeypatch.setattr(
-        "eightd.phases.phase_0_research.MEMORY_GLOB",
+        "ai_escape_mrc.phases.phase_0_research.MEMORY_GLOB",
         str(tmp_path / "nothing" / "feedback_*.md"),
     )
     call_claude_mock = make_call_claude_mock({
         "Extract 3-5 high-signal technical keywords": {"keywords": ["kw"]},
         "Emit 3 abstract problem-class names": {"categories": ["c1", "c2", "c3"], "domains": ["d1", "d2", "d3"]},
     })
-    with patch("eightd.phases.phase_0_research.call_claude", side_effect=call_claude_mock), \
-         patch("eightd.phases.phase_0_research.websearch", side_effect=make_websearch_mock()):
+    with patch("ai_escape_mrc.phases.phase_0_research.call_claude", side_effect=call_claude_mock), \
+         patch("ai_escape_mrc.phases.phase_0_research.websearch", side_effect=make_websearch_mock()):
         result = phase_0_research(dict(base_state))
     assert result["phase_0_complete"] is True
     assert result["wiki_pages"] == []
     assert result["memory_entries"] == []
+
+
+def test_phase_0_does_not_swallow_visibility_contract_errors(base_state, tmp_path):
+    state = dict(base_state)
+    state["run_dir"] = str(tmp_path)
+
+    with patch(
+        "ai_escape_mrc.phases.phase_0_research.call_claude",
+        side_effect=VisibilityContractError("progress sink failed", phase="llm", sink="screen"),
+    ):
+        with pytest.raises(VisibilityContractError, match="progress sink failed"):
+            phase_0_research(state)

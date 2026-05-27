@@ -1,6 +1,6 @@
-"""Phase 4 — 2 corrective (Q1,Q2) + 2 prevention (Q3,Q4) = 4 parallel calls."""
+"""Phase 4 ??2 corrective (Q1,Q2) + 2 prevention (Q3,Q4) = 4 parallel calls."""
 from unittest.mock import patch
-from eightd.phases.phase_4_actions import (
+from ai_escape_mrc.phases.phase_4_actions import (
     phase_4_actions, _normalize_action_dict,
     CORRECTIVE_QUADRANTS, PREVENTION_QUADRANTS,
 )
@@ -20,7 +20,7 @@ def test_phase_4_corrective_only_for_q1_q2():
             return {"action": "fix", "rationale": "..."}
         return {"action": "prevent", "gate_test": {"scope": "PASS"}}
 
-    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake):
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
         result = phase_4_actions(_base_state())
 
     assert set(result["corrective_actions"].keys()) == {"q1_trc_nc", "q2_trc_nd"}
@@ -34,7 +34,7 @@ def test_phase_4_prevention_only_for_q3_q4():
             return {"action": "fix"}
         return {"action": "prevent"}
 
-    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake):
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
         result = phase_4_actions(_base_state())
 
     assert set(result["prevention_actions"].keys()) == {"q3_mrc_nc", "q4_mrc_nd"}
@@ -50,7 +50,7 @@ def test_phase_4_makes_exactly_4_calls():
         call_count["n"] += 1
         return {"action": "x"}
 
-    with patch("eightd.phases.phase_4_actions.call_claude", side_effect=fake):
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
         phase_4_actions(_base_state())
 
     assert call_count["n"] == 4
@@ -58,7 +58,7 @@ def test_phase_4_makes_exactly_4_calls():
 
 def test_phase_4_unwraps_list_wrapped_dict():
     wrapped = [{"action": "wrapped"}]
-    with patch("eightd.phases.phase_4_actions.call_claude", return_value=wrapped):
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", return_value=wrapped):
         result = phase_4_actions(_base_state())
     for q in CORRECTIVE_QUADRANTS:
         assert result["corrective_actions"][q] == {"action": "wrapped"}
@@ -67,7 +67,7 @@ def test_phase_4_unwraps_list_wrapped_dict():
 
 
 def test_phase_4_handles_unparseable_shape():
-    with patch("eightd.phases.phase_4_actions.call_claude", return_value="bare string"):
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", return_value="bare string"):
         result = phase_4_actions(_base_state())
     for q in CORRECTIVE_QUADRANTS:
         assert "_parse_warning" in result["corrective_actions"][q]
@@ -85,7 +85,7 @@ def test_normalize_action_dict_unit():
 
 
 def test_phase_5_audit_skips_non_dict_prevention_action():
-    from eightd.phases.phase_5_prevention_audit import phase_5_prevention_audit
+    from ai_escape_mrc.phases.phase_5_prevention_audit import phase_5_prevention_audit
     state = {
         "prevention_actions": {
             "q3_mrc_nc": [{"action": "a"}],  # list shape (from older checkpoint)
@@ -103,7 +103,7 @@ def test_phase_5_audit_skips_non_dict_prevention_action():
             ],
         }
 
-    with patch("eightd.phases.phase_5_prevention_audit.call_claude", side_effect=fake):
+    with patch("ai_escape_mrc.phases.phase_5_prevention_audit.call_claude", side_effect=fake):
         result = phase_5_prevention_audit(state)
 
     # Should not crash even with list-shaped prevention_actions.
