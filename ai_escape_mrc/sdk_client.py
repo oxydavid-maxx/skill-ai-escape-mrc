@@ -115,8 +115,6 @@ async def _sdk_query(
         max_turns=max_turns,
         env=dict(_SDK_ENV),
     )
-    if allow_tools:
-        opts_kwargs["permission_mode"] = "bypassPermissions"
     if model:
         opts_kwargs["model"] = model
     if schema is not None:
@@ -273,15 +271,33 @@ def call_claude(
     _emit("llm", "llm_call_start",
           {"purpose": purpose, "prompt_len": len(user)}, model=log_model)
 
-    result = asyncio.run(_sdk_query(
-        prompt=user,
-        system_prompt=system.rstrip(),
-        model=model,
-        schema=json_schema,
-        timeout_sec=timeout_sec,
-        max_turns=5 if allow_tools else 3,
-        allow_tools=allow_tools,
-    ))
+    def _run(use_tools: bool) -> dict:
+        return asyncio.run(_sdk_query(
+            prompt=user,
+            system_prompt=system.rstrip(),
+            model=model,
+            schema=json_schema,
+            timeout_sec=timeout_sec,
+            max_turns=5 if use_tools else 3,
+            allow_tools=use_tools,
+        ))
+
+    if allow_tools:
+        # Tool use is optional augmentation (audit phases "Use WebSearch if ...").
+        # If the tool-enabled call cannot run in this environment, degrade to a
+        # tool-less call so the phase still produces real output instead of
+        # collapsing to a fallback stub. JSON/visibility errors are not masked.
+        try:
+            result = _run(True)
+        except (json.JSONDecodeError, VisibilityContractError):
+            raise
+        except Exception as tool_exc:
+            _emit("llm", "llm_tool_unavailable",
+                  {"purpose": purpose, "error": f"{type(tool_exc).__name__}: {str(tool_exc)[:200]}"},
+                  model=log_model)
+            result = _run(False)
+    else:
+        result = _run(False)
 
     if json_schema is not None:
         so = result.get("structured")

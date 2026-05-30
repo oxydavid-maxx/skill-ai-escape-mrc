@@ -4,6 +4,8 @@ CORE GUARANTEE: Phase 0 is Python-forced execution. Claude does NOT decide
 whether to search. Python runs the searches; results go into state.
 """
 import glob
+import sys
+import time
 from pathlib import Path
 
 from ai_escape_mrc.errors import VisibilityContractError
@@ -25,6 +27,29 @@ PROMINENT_SITES = [
     "github.com",
     "reddit.com",
 ]
+
+
+def _safe_websearch(query_text: str) -> dict:
+    """Run one websearch but never let a failure abort the whole pipeline.
+
+    Phase 0 is "Python-forced" research, but a single search outage (network,
+    rate limit, tool unavailable in the runtime) must NOT discard all upstream
+    work. On failure we return an empty-result record tagged with the error so
+    downstream phases degrade gracefully instead of crashing.
+    """
+    try:
+        return websearch(query_text)
+    except Exception as e:
+        sys.stderr.write(
+            f"[WARN] websearch failed for {query_text[:60]!r}: "
+            f"{type(e).__name__}: {str(e)[:120]}; continuing without it\n"
+        )
+        return {
+            "query": query_text,
+            "results": "",
+            "error": f"{type(e).__name__}: {str(e)[:200]}",
+            "timestamp": time.time(),
+        }
 
 
 def phase_0_research(state: dict) -> dict:
@@ -120,7 +145,7 @@ def phase_0_research(state: dict) -> dict:
         f"{len(meta_queries)} meta, {len(cross_queries)} cross-domain).",
         f"First query: {all_queries[0] if all_queries else '(none)'}",
     )
-    all_results = parallel_map(websearch, all_queries, max_workers=5)
+    all_results = parallel_map(_safe_websearch, all_queries, max_workers=5)
     emit_stage_progress(
         "phase_0_research",
         state,
