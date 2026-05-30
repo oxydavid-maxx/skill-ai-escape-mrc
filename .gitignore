@@ -1,5 +1,7 @@
 # LangGraph runtime state (per-run SQLite + logs)
 runs/
+# Transient console capture from manual pipeline runs
+runs_console.log
 # Model discovery cache
 .anthropic-models-cache.json
 # Python
