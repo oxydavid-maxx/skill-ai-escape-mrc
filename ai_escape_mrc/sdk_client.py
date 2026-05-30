@@ -232,7 +232,7 @@ def _should_retry(retry_state) -> bool:
     return True
 
 
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=30),
+@retry(stop=stop_after_attempt(8), wait=wait_exponential(min=3, max=60),
        retry=_should_retry, reraise=True)
 def call_claude(
     model: str | None,
@@ -336,7 +336,7 @@ def call_claude(
     return text
 
 
-@retry(stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=30),
+@retry(stop=stop_after_attempt(8), wait=wait_exponential(min=3, max=60),
        retry=_should_retry, reraise=True)
 def websearch(query_text: str, max_tokens: int = 4000) -> dict:
     """Web search via Agent SDK. Returns {query, results, timestamp}.
