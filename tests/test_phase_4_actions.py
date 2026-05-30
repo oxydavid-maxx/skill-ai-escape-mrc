@@ -93,17 +93,29 @@ def test_phase_5_audit_skips_non_dict_prevention_action():
         },
     }
 
-    def fake(**kw):
-        return {
-            "round": 1,
-            "verdict": "EXHAUSTED",
-            "weaknesses": [
-                {"quadrant": "q3_mrc_nc", "classification": "ADDRESSABLE",
-                 "suggested_fix": "tighten"},
-            ],
-        }
+    audit = {
+        "round": 1,
+        "verdict": "EXHAUSTED",
+        "weaknesses": [
+            {"quadrant": "q3_mrc_nc", "classification": "ADDRESSABLE",
+             "suggested_fix": "tighten"},
+        ],
+    }
 
-    with patch("ai_escape_mrc.phases.phase_5_prevention_audit.call_claude", side_effect=fake):
+    class _FakeSession:
+        def __init__(self, **kw):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def ask(self, user, purpose="unknown"):
+            return audit
+
+    with patch("ai_escape_mrc.phases.phase_5_prevention_audit.ClaudeSession", _FakeSession):
         result = phase_5_prevention_audit(state)
 
     # Should not crash even with list-shaped prevention_actions.

@@ -265,3 +265,65 @@ def test_visibility_contract_errors_are_not_retried():
         outcome = Outcome()
 
     assert _should_retry(RetryState()) is False
+
+
+class _FakeSDKClient:
+    """Minimal async stand-in for claude_agent_sdk.ClaudeSDKClient."""
+    connect_count = 0
+    disconnect_count = 0
+
+    # Per-turn structured outputs the next receive_response() should yield.
+    responses = []
+
+    def __init__(self, options=None):
+        self.options = options
+        self._turn = 0
+
+    async def connect(self, prompt=None):
+        type(self).connect_count += 1
+
+    async def disconnect(self):
+        type(self).disconnect_count += 1
+
+    async def query(self, prompt, session_id="default"):
+        self._prompt = prompt
+
+    async def receive_response(self):
+        payload = type(self).responses[self._turn]
+        self._turn += 1
+        yield FakeAssistantMessage([FakeToolUseBlock("StructuredOutput", payload)])
+        yield FakeResultMessage()
+
+
+def test_claude_session_connects_once_for_multiple_turns():
+    from ai_escape_mrc import sdk_client
+
+    _FakeSDKClient.connect_count = 0
+    _FakeSDKClient.disconnect_count = 0
+    _FakeSDKClient.responses = [{"round": 1}, {"round": 2}, {"round": 3}]
+
+    schema = {"type": "object"}
+    with patch("ai_escape_mrc.sdk_client.ClaudeSDKClient", _FakeSDKClient):
+        with sdk_client.ClaudeSession(system="s", schema=schema, timeout_sec=10) as sess:
+            r1 = sess.ask("turn1", purpose="round_1")
+            r2 = sess.ask("turn2", purpose="round_2")
+            r3 = sess.ask("turn3", purpose="round_3")
+
+    assert (r1, r2, r3) == ({"round": 1}, {"round": 2}, {"round": 3})
+    # One persistent subprocess for all three turns.
+    assert _FakeSDKClient.connect_count == 1
+    assert _FakeSDKClient.disconnect_count == 1
+
+
+def test_claude_session_text_mode_returns_string():
+    from ai_escape_mrc import sdk_client
+
+    class _TextClient(_FakeSDKClient):
+        async def receive_response(self):
+            yield FakeAssistantMessage([FakeTextBlock("hello world")])
+            yield FakeResultMessage()
+
+    with patch("ai_escape_mrc.sdk_client.ClaudeSDKClient", _TextClient):
+        with sdk_client.ClaudeSession(system="s", schema=None, timeout_sec=10) as sess:
+            out = sess.ask("hi", purpose="t")
+    assert out == "hello world"

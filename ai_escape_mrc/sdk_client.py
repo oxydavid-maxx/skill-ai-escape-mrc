@@ -31,7 +31,7 @@ from ai_escape_mrc.no_console import patch_anyio_open_process_for_windows
 
 patch_anyio_open_process_for_windows()
 
-from claude_agent_sdk import ClaudeAgentOptions, query
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, query
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from ai_escape_mrc.errors import VisibilityContractError
@@ -334,6 +334,155 @@ def call_claude(
             _dump_parse_failure(text, f"{purpose}_first_attempt")
             raise
     return text
+
+
+async def _session_turn(client: ClaudeSDKClient, user: str, timeout_sec: int) -> dict:
+    """Run one turn on an already-connected ClaudeSDKClient and aggregate it."""
+    async def _run():
+        await client.query(user)
+        return await _collect_messages(client.receive_response())
+
+    return await asyncio.wait_for(_run(), timeout=timeout_sec)
+
+
+class ClaudeSession:
+    """Persistent ClaudeSDKClient session: connect one subprocess, run many turns.
+
+    The default transport (`call_claude` -> `query()`) spawns a fresh `claude`
+    CLI subprocess per call, paying session-startup overhead every time. When a
+    phase issues several calls that share one system prompt + schema and form a
+    natural conversation (e.g. the sequential audit rounds, where round N+1
+    reacts to round N), routing them through ONE persistent session pays that
+    startup once and cuts the number of spawns (which, on a flaky transport,
+    also cuts retry storms).
+
+    Each turn's user prompt should remain self-contained enough to be correct
+    even if the underlying connection is lost and transparently reconnected.
+
+    Usage:
+        with ClaudeSession(system=sys, model=m, schema=SCHEMA, allow_tools=True) as s:
+            r1 = s.ask(user1, purpose="round_1")
+            r2 = s.ask(user2, purpose="round_2")
+
+    `ask()` returns a schema dict when `schema` was given, else the text string.
+    On a turn failure it retries (transport errors only) and reconnects a dead
+    session before giving up; JSON/visibility errors are not masked.
+    """
+
+    def __init__(self, *, system: str, model: str | None = None,
+                 schema: dict | None = None, allow_tools: bool = False,
+                 timeout_sec: int = 600, max_attempts: int = 8):
+        self._system = system.rstrip()
+        self._model = model
+        self._schema = schema
+        self._timeout = timeout_sec
+        self._max_attempts = max_attempts
+        # Honour the process-wide latch: never connect with tools we already
+        # know cannot run in this runtime.
+        self._tools = allow_tools and not _TOOLS_UNAVAILABLE
+        self._loop: Any = None
+        self._client: ClaudeSDKClient | None = None
+
+    def _build_options(self) -> ClaudeAgentOptions:
+        opts: dict[str, Any] = dict(
+            system_prompt=self._system,
+            setting_sources=None,
+            allowed_tools=["WebSearch"] if self._tools else [],
+            max_turns=5 if self._tools else 3,
+            env=dict(_SDK_ENV),
+        )
+        if self._model:
+            opts["model"] = self._model
+        if self._schema is not None:
+            opts["output_format"] = {"type": "json_schema", "schema": self._schema}
+        return ClaudeAgentOptions(**opts)
+
+    def _connect(self) -> None:
+        self._client = ClaudeSDKClient(options=self._build_options())
+        self._loop.run_until_complete(self._client.connect())
+
+    def _disconnect(self) -> None:
+        if self._client is not None:
+            try:
+                self._loop.run_until_complete(self._client.disconnect())
+            except Exception:
+                pass
+            self._client = None
+
+    def __enter__(self) -> "ClaudeSession":
+        self._loop = asyncio.new_event_loop()
+        try:
+            self._connect()
+        except Exception:
+            # Connecting with tools failed -> fall back to a tool-less session.
+            if self._tools:
+                self._tools = False
+                self._disconnect()
+                self._connect()
+            else:
+                raise
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self._disconnect()
+        try:
+            self._loop.close()
+        except Exception:
+            pass
+        self._loop = None
+
+    def _finalize(self, result: dict, purpose: str, log_model: str):
+        if self._schema is not None:
+            so = result.get("structured")
+            if so is None:
+                raise RuntimeError(
+                    f"SDK schema session turn returned no structured output "
+                    f"(is_error={result['is_error']}, text_len={len(result['text'])})"
+                )
+            _emit("llm", "llm_call_end",
+                  {"purpose": purpose, "text_len": len(json.dumps(so))}, model=log_model)
+            return so
+        text = result["text"]
+        if not text:
+            raise RuntimeError(f"SDK session turn returned empty text (purpose={purpose})")
+        _emit("llm", "llm_call_end",
+              {"purpose": purpose, "text_len": len(text)}, model=log_model)
+        return text
+
+    def ask(self, user: str, purpose: str = "unknown"):
+        global _TOOLS_UNAVAILABLE
+        log_model = model_label(self._model)
+        _emit("llm", "llm_call_start",
+              {"purpose": purpose, "prompt_len": len(user), "session": True}, model=log_model)
+
+        last_exc: Exception | None = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                result = self._loop.run_until_complete(
+                    _session_turn(self._client, user, self._timeout)
+                )
+                return self._finalize(result, purpose, log_model)
+            except (json.JSONDecodeError, VisibilityContractError):
+                raise
+            except Exception as exc:  # transport / process error
+                last_exc = exc
+                # If we were using tools and they're the problem, drop to a
+                # tool-less session for the remainder.
+                if self._tools:
+                    _TOOLS_UNAVAILABLE = True
+                    self._tools = False
+                    _emit("llm", "llm_tool_unavailable",
+                          {"purpose": purpose, "error": f"{type(exc).__name__}: {str(exc)[:200]}"},
+                          model=log_model)
+                if attempt < self._max_attempts:
+                    time.sleep(min(60, 3 * (2 ** (attempt - 1))))
+                    # Reconnect a (possibly dead) session before retrying.
+                    self._disconnect()
+                    try:
+                        self._connect()
+                    except Exception:
+                        pass
+        raise last_exc if last_exc else RuntimeError(f"session turn failed (purpose={purpose})")
 
 
 @retry(stop=stop_after_attempt(8), wait=wait_exponential(min=3, max=60),

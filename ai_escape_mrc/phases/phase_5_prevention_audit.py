@@ -5,13 +5,21 @@ prevention actions for Q1/Q2 (those are corrective-only quadrants).
 """
 import json
 from ai_escape_mrc.errors import VisibilityContractError
-from ai_escape_mrc.sdk_client import call_claude
+from ai_escape_mrc.sdk_client import ClaudeSession
 from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc import schemas
 
 NUM_ROUNDS = 3
 PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
+
+
+def _has_addressable(audit: dict) -> bool:
+    """True if the audit round surfaced at least one ADDRESSABLE weakness."""
+    for w in audit.get("weaknesses", []) or []:
+        if isinstance(w, dict) and w.get("classification") == "ADDRESSABLE":
+            return True
+    return False
 
 
 def phase_5_prevention_audit(state: dict) -> dict:
@@ -24,47 +32,52 @@ def phase_5_prevention_audit(state: dict) -> dict:
         for q in PREVENTION_QUADRANTS
     }
 
-    for round_num in range(1, NUM_ROUNDS + 1):
-        user_msg = (
-            f"Round {round_num} of {NUM_ROUNDS}.\n\n"
-            f"Prevention actions (Q3, Q4 only):\n"
-            f"{json.dumps(preventions, ensure_ascii=False)[:5000]}\n\n"
-            "Use WebSearch if you want to benchmark against state-of-the-art."
-        )
-        try:
-            audit = call_claude(
-                model=model_for_role("prevention_audit"),
-                system=system,
-                user=user_msg,
-                json_schema=schemas.PREVENTION_AUDIT,
-                purpose=f"phase_5_prevention_audit_round_{round_num}",
-                allow_tools=True,
+    # One persistent session across rounds (same rationale as phase_3): pay the
+    # subprocess startup once and minimize spawns on a flaky transport.
+    with ClaudeSession(
+        system=system,
+        model=model_for_role("prevention_audit"),
+        schema=schemas.PREVENTION_AUDIT,
+        allow_tools=True,
+    ) as sess:
+        for round_num in range(1, NUM_ROUNDS + 1):
+            user_msg = (
+                f"Round {round_num} of {NUM_ROUNDS}.\n\n"
+                f"Prevention actions (Q3, Q4 only):\n"
+                f"{json.dumps(preventions, ensure_ascii=False)[:5000]}\n\n"
+                "Use WebSearch if you want to benchmark against state-of-the-art."
             )
-        except VisibilityContractError:
-            raise
-        except Exception as e:
-            import sys
-            sys.stderr.write(f"[WARN] phase_5 round {round_num} failed: {str(e)[:150]}; skipping round\n")
-            audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
-        if isinstance(audit, list):
-            if len(audit) == 1 and isinstance(audit[0], dict):
-                audit = audit[0]
-            else:
-                audit = {"round": round_num, "weaknesses": audit, "verdict": "EXHAUSTED",
-                         "_normalized_from_list": True}
-        if not isinstance(audit, dict):
-            audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED",
-                     "_fallback": True}
-        state["phase_5_rounds"].append(audit)
+            try:
+                audit = sess.ask(user_msg, purpose=f"phase_5_prevention_audit_round_{round_num}")
+            except VisibilityContractError:
+                raise
+            except Exception as e:
+                import sys
+                sys.stderr.write(f"[WARN] phase_5 round {round_num} failed: {str(e)[:150]}; skipping round\n")
+                audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
+            if isinstance(audit, list):
+                if len(audit) == 1 and isinstance(audit[0], dict):
+                    audit = audit[0]
+                else:
+                    audit = {"round": round_num, "weaknesses": audit, "verdict": "EXHAUSTED",
+                             "_normalized_from_list": True}
+            if not isinstance(audit, dict):
+                audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED",
+                         "_fallback": True}
+            state["phase_5_rounds"].append(audit)
 
-        _apply_fixes(state["prevention_actions"], audit)
+            _apply_fixes(state["prevention_actions"], audit)
 
-        for w in audit.get("weaknesses", []) or []:
-            if isinstance(w, dict) and w.get("classification") == "RESIDUAL":
-                residual.append(w)
+            for w in audit.get("weaknesses", []) or []:
+                if isinstance(w, dict) and w.get("classification") == "RESIDUAL":
+                    residual.append(w)
 
-        if audit.get("verdict") == "EXHAUSTED":
-            break
+            # Quality-preserving early exit (see phase_3): stop on EXHAUSTED or
+            # a real round with no ADDRESSABLE weakness (converged).
+            if audit.get("verdict") == "EXHAUSTED":
+                break
+            if not audit.get("_fallback") and not _has_addressable(audit):
+                break
 
     state["phase_5_residual_risks"] = residual
     # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
