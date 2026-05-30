@@ -41,30 +41,43 @@ live output in the current launcher, use:
 py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py "<automation escape topic>" --user-email user@example.com
 ```
 
-Add `--detach` only for true fire-and-forget background mode. Detached runs
-cannot print to a visible screen; they write the same summaries to the printed
-stderr log and to `runs/<run_id>/stage-summaries.md/jsonl`.
+## Progress visibility (MANDATORY for the running agent)
 
-When you are running this skill from inside a Codex/Claude agent, do not block
-the conversation on a long shell command. Use deterministic watch mode so the
-launcher itself streams the hidden run output back to the active conversation:
+This run prints a `[AI Escape MRC] Phase X/10` block at every phase start, each
+step, and each phase summary. The user MUST see that progress as it happens.
+When you (an AI agent) launch this skill, follow these rules — they are part of
+the contract, not suggestions:
+
+1. **Default to foreground and let it stream.** Run `run_ai_escape_mrc.py`
+   directly and let its stderr flow back into the conversation. Surface the
+   phase blocks to the user as they appear.
+2. **NEVER hide the stream.** Do not redirect stderr to a file-only sink (e.g.
+   `nohup … > run.log 2>&1`) and then go quiet. Do not use `--detach` for an
+   interactive/skill run. Hiding progress in a log the user can't see is a
+   failure of this skill.
+3. **If the run is too long to hold a foreground shell, background it but stay
+   loud.** Start it with a fixed `--run-id <id>`, then continuously surface
+   progress one of two ways:
+   - attach a follower that streams live: `run_ai_escape_mrc.py --watch <id>`, or
+   - poll every ≤60 s: `run_ai_escape_mrc.py --status-json <id>`,
+   and **post each new phase transition, completed-phase summary, and stall
+   warning back to the user as it happens.** Do NOT wait until the end and dump
+   one final message — that is the exact anti-pattern this rule forbids.
+4. **The user must never have to tail logs themselves.** You relay progress.
+
+Agent-mediated launch (background + live stream back to the conversation):
 
 ```powershell
 py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py --agent --watch "<automation escape topic>" --user-email user@example.com
 ```
 
-Detached agent runs are allowed only when the caller has its own polling loop.
-In that case start with agent metadata, report the returned run id to the user,
-then poll status and paste the human summary back into the chat:
+Detached (`--detach`/`--agent`) runs are allowed ONLY when you immediately
+attach `--watch <id>` or a ≤60 s `--status-json <id>` poll-and-relay loop:
 
 ```powershell
-py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py --agent --detach "<automation escape topic>" --user-email user@example.com
-py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc.py --status-json "<run_dir from the JSON metadata>"
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc.py --watch "<run_id>"
+py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc.py --status-json "<run_id>"
 ```
-
-Poll at least every 60 seconds while the run is active, and immediately report
-phase changes, stall warnings, and completed phase summaries. The user must not
-have to tail logs manually.
 
 Optional flags:
 
@@ -76,8 +89,11 @@ Optional flags:
 - `--detach`: hidden launcher only; stop streaming logs to the current output.
 - `--agent`: hidden launcher only; start in background and print JSON metadata
   for agent polling.
-- `--watch`: hidden launcher only; stream hidden child output back to the
-  current output even when `--agent` is used.
+- `--watch`: two uses. On the hidden launcher (boolean) it streams the hidden
+  child output back to the current output even when `--agent` is used. On the
+  main entrypoint, `run_ai_escape_mrc.py --watch <run_id_or_dir>` attaches a
+  live follower that streams a run's phase/step summaries until it finishes —
+  use it from a second terminal or to relay a backgrounded run.
 - `--status-json <run_id_or_dir>`: print a machine-readable status snapshot.
 - `--approve` / `--reject <reason>` / `--status`: legacy approval-execution
   flags; they now report that Phase 11 execution was removed. Use

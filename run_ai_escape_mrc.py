@@ -27,6 +27,9 @@ def main():
     ap.add_argument("--run-id", help=argparse.SUPPRESS)
     ap.add_argument("--status-json", metavar="RUN_ID_OR_DIR",
                     help="Print a JSON status snapshot for a run id or run directory")
+    ap.add_argument("--watch", metavar="RUN_ID_OR_DIR",
+                    help="Stream a run's live phase/step summaries until it finishes "
+                         "(use from a second terminal, or to relay a backgrounded run)")
     ap.add_argument("--gc", action="store_true", help="Clean runs older than 30d")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--user-email", help="Requester email; final report/plan email goes here when set")
@@ -48,6 +51,10 @@ def main():
         status = status_for_run(args.status_json, default_runs_dir=RUNS_DIR)
         print(json.dumps(status, ensure_ascii=False, indent=2))
         return 0 if status.get("exists") else 1
+
+    if args.watch:
+        from ai_escape_mrc.run_status import follow_run
+        return follow_run(args.watch, default_runs_dir=RUNS_DIR)
 
     if not args.problem and not args.resume_id:
         ap.error("problem is required (or use --resume <run_id>)")

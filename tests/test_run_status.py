@@ -10,6 +10,51 @@ def _append_jsonl(path, rows):
             f.write(json.dumps(row) + "\n")
 
 
+def test_follow_run_streams_screens_until_complete(tmp_path):
+    import io
+    from ai_escape_mrc.run_status import follow_run
+
+    run_dir = tmp_path / "run-watch"
+    run_dir.mkdir()
+    now = time.time()
+    _append_jsonl(
+        run_dir / "progress.jsonl",
+        [
+            {"ts": now - 2, "phase": "phase_10_emit_and_wait", "event": "phase_start", "detail": {}, "total_elapsed_sec": 1},
+            {"ts": now - 1, "phase": "phase_10_emit_and_wait", "event": "phase_end", "detail": {"ok": True}, "total_elapsed_sec": 2},
+        ],
+    )
+    _append_jsonl(
+        run_dir / "stage-progress.jsonl",
+        [{"ts": "2026-01-01T00:00:00", "phase": "phase_0_research", "screen": "[AI Escape MRC] Phase 0\n- step A"}],
+    )
+    _append_jsonl(
+        run_dir / "stage-summaries.jsonl",
+        [{"ts": "2026-01-01T00:00:01", "kind": "phase_summary", "phase": "phase_10_emit_and_wait",
+          "screen": "[AI Escape MRC] Phase 10\n- delivered"}],
+    )
+
+    out = io.StringIO()
+    rc = follow_run(str(run_dir), default_runs_dir=tmp_path, stream=out, poll_sec=0.01)
+    text = out.getvalue()
+
+    assert rc == 0  # terminal "complete"
+    assert "step A" in text          # streamed a stage-progress screen
+    assert "delivered" in text       # streamed a stage-summary screen
+    assert "Status: complete" in text  # final human summary
+
+
+def test_follow_run_not_found_returns_1(tmp_path):
+    import io
+    from ai_escape_mrc.run_status import follow_run
+
+    out = io.StringIO()
+    rc = follow_run("run-does-not-exist", default_runs_dir=tmp_path,
+                    stream=out, poll_sec=0.01, wait_for_start_sec=0.0)
+    assert rc == 1
+    assert "not found" in out.getvalue()
+
+
 def test_status_for_run_reports_current_phase_and_summary(tmp_path):
     run_dir = tmp_path / "run-1"
     run_dir.mkdir()

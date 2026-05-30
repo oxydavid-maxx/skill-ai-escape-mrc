@@ -133,6 +133,30 @@ py -3 run_ai_escape_mrc_hidden.py --agent --detach "<problem description>" --use
 py -3 run_ai_escape_mrc.py --status-json "<run_dir from launcher JSON>"
 ```
 
+### Watching progress (humans and agents)
+
+Progress is built in and fail-loud: every phase start, step, and phase summary
+prints a `[AI Escape MRC] Phase X/10` block to stderr and is persisted to
+`runs/<run_id>/stage-summaries.md/.jsonl`. If a progress sink cannot be written
+the run fails closed rather than going silent.
+
+- **Foreground (default):** progress streams to your terminal automatically —
+  no flags needed. This is the recommended way to run interactively.
+- **Re-attach / second terminal / relay a background run:** stream a run's live
+  phase/step summaries until it finishes with the main entrypoint's follower:
+
+  ```powershell
+  py -3 run_ai_escape_mrc.py --watch "<run_id>"
+  ```
+
+- **One-shot snapshot (polling):** `py -3 run_ai_escape_mrc.py --status-json "<run_id>"`.
+
+When an AI agent runs this skill it must keep the user in the loop: never
+redirect the stream to a hidden log and go quiet. If it backgrounds a long run,
+it must attach `--watch <id>` or poll `--status-json <id>` every ≤60 s and relay
+each phase transition and summary as it happens. See SKILL.md
+"Progress visibility (MANDATORY for the running agent)".
+
 Useful flags:
 
 | Flag | Purpose |
@@ -144,7 +168,7 @@ Useful flags:
 | `--operator-email <email>` | Operator email to CC, or fallback recipient if no requester is known. |
 | `--detach` | Hidden launcher only: do not stream the child run log back to the current output. |
 | `--agent` | Hidden launcher only: background run plus JSON metadata for chat polling. |
-| `--watch` | Hidden launcher only: stream hidden child output even when `--agent` is used. |
+| `--watch` | Hidden launcher: stream hidden child output even when `--agent` is used. Main entrypoint: `run_ai_escape_mrc.py --watch <run_id>` attaches a live follower that streams a run's phase/step summaries until it finishes. |
 | `--status-json <run_id_or_dir>` | Print current run status for agent/user polling. |
 | `--approve` | Removed legacy flag; prints that Phase 11 approval execution was removed. |
 | `--reject <reason>` | Removed legacy flag; prints that Phase 11 approval execution was removed. |

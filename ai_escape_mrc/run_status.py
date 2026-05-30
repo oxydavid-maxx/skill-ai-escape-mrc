@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from ai_escape_mrc.stage_summary import PHASE_TITLES
+
+TERMINAL_STATUSES = frozenset({"complete", "error", "delivery_failed"})
 
 
 def status_for_run(identifier: str, *, default_runs_dir: Path | None = None) -> dict[str, Any]:
@@ -249,3 +252,81 @@ def _human_summary(
             lines.append(f"- Last event: {last_event.get('event')}")
     lines.append(f"- Last update: {round(since_last, 1)}s ago")
     return "\n".join(lines)
+
+
+def _drain_screens(files: list[Path], offsets: dict[Path, int], stream) -> None:
+    """Print the `screen` block of any new JSONL records appended to `files`.
+
+    Best-effort, mirroring run_ai_escape_mrc_hidden._drain_log: advances each
+    file's read offset and skips partial/unparseable lines. New records from all
+    files are merged and printed in timestamp order.
+    """
+    batch: list[tuple[str, str]] = []
+    for f in files:
+        try:
+            with open(f, "r", encoding="utf-8", errors="replace") as fh:
+                fh.seek(offsets.get(f, 0))
+                text = fh.read()
+                offsets[f] = fh.tell()
+        except OSError:
+            continue
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            screen = rec.get("screen") or rec.get("message") or ""
+            if screen:
+                batch.append((str(rec.get("ts", "")), screen))
+    for _ts, screen in sorted(batch, key=lambda x: x[0]):
+        stream.write(screen + "\n")
+        stream.flush()
+
+
+def follow_run(
+    identifier: str,
+    *,
+    default_runs_dir: Path | None = None,
+    stream=None,
+    poll_sec: float = 2.0,
+    wait_for_start_sec: float = 30.0,
+) -> int:
+    """Stream a run's live phase/step summaries until it reaches a terminal state.
+
+    Tails the run's stage-progress.jsonl + stage-summaries.jsonl (both carry a
+    ready-to-print `screen` block) and prints new entries as they appear, then
+    prints the final human summary. Returns a process-style exit code:
+    0 = complete, 3 = error/delivery_failed, 1 = run not found.
+
+    Designed for a human in a second terminal OR an agent that wants to relay
+    live progress for a backgrounded run.
+    """
+    stream = stream or sys.stderr
+    run_dir = resolve_run_dir(identifier, default_runs_dir=default_runs_dir)
+    waited = 0.0
+    while run_dir is None and waited < wait_for_start_sec:
+        time.sleep(poll_sec)
+        waited += poll_sec
+        run_dir = resolve_run_dir(identifier, default_runs_dir=default_runs_dir)
+    if run_dir is None:
+        stream.write(f"[watch] run not found: {identifier}\n")
+        stream.flush()
+        return 1
+
+    files = [run_dir / "stage-progress.jsonl", run_dir / "stage-summaries.jsonl"]
+    offsets: dict[Path, int] = {f: 0 for f in files}
+    stream.write(f"[watch] following {run_dir.name} (Ctrl-C to stop)\n")
+    stream.flush()
+
+    while True:
+        _drain_screens(files, offsets, stream)
+        snap = status_for_run(str(run_dir), default_runs_dir=default_runs_dir)
+        if snap.get("status") in TERMINAL_STATUSES:
+            _drain_screens(files, offsets, stream)
+            stream.write("\n" + (snap.get("human_summary") or "") + "\n")
+            stream.flush()
+            return 0 if snap.get("status") == "complete" else 3
+        time.sleep(poll_sec)

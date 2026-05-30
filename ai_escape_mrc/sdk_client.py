@@ -49,6 +49,10 @@ _SDK_ENV: dict[str, str] = {
 # the tool-less path. Avoids burning a flaky subprocess spawn per audit call.
 _TOOLS_UNAVAILABLE = False
 
+# Same idea for the dedicated websearch() path: once one query proves web search
+# can't run here, later queries degrade immediately instead of each retrying.
+_WEBSEARCH_UNAVAILABLE = False
+
 
 def _emit(channel: str, event: str, payload: dict, **extra: Any) -> None:
     """Emit a required progress event."""
@@ -485,18 +489,17 @@ class ClaudeSession:
         raise last_exc if last_exc else RuntimeError(f"session turn failed (purpose={purpose})")
 
 
-@retry(stop=stop_after_attempt(8), wait=wait_exponential(min=3, max=60),
+def _degraded_websearch(query_text: str, reason: str) -> dict:
+    """Empty, error-tagged web-search result so callers can degrade gracefully."""
+    return {"query": query_text, "results": "", "error": reason, "timestamp": time.time()}
+
+
+# Two attempts only: web search is OPTIONAL augmentation (phase_0). When the
+# runtime simply cannot run it, more retries just flood the screen and waste
+# minutes — the latch below short-circuits the rest of the batch.
+@retry(stop=stop_after_attempt(2), wait=wait_exponential(min=2, max=15),
        retry=_should_retry, reraise=True)
-def websearch(query_text: str, max_tokens: int = 4000) -> dict:
-    """Web search via Agent SDK. Returns {query, results, timestamp}.
-
-    Drop-in replacement for anthropic_client.websearch. Uses SDK with
-    WebSearch tool permitted. No OpenRouter fallback ??if the SDK cannot
-    complete, the retry decorator handles transient failures and ultimate
-    errors propagate to the caller.
-    """
-    _emit("websearch", "search_start", {"query": query_text[:80]})
-
+def _websearch_once(query_text: str, max_tokens: int = 4000) -> dict:
     system_prompt = "You are a web research assistant. Use the WebSearch tool when asked."
     user_prompt = (
         f"Please use the WebSearch tool to search for: {query_text}\n\n"
@@ -504,11 +507,14 @@ def websearch(query_text: str, max_tokens: int = 4000) -> dict:
         "Format as plain text with clear URL citations."
     )
 
+    # Least-privilege: allow only the WebSearch tool. We deliberately do NOT use
+    # permission_mode="bypassPermissions" — that maps to --dangerously-skip-
+    # permissions, which is rejected under root and is unnecessary for a single
+    # whitelisted tool.
     opts = ClaudeAgentOptions(
         system_prompt=system_prompt,
         setting_sources=None,
         allowed_tools=["WebSearch"],
-        permission_mode="bypassPermissions",
         max_turns=5,
         env=dict(_SDK_ENV),
     )
@@ -520,11 +526,39 @@ def websearch(query_text: str, max_tokens: int = 4000) -> dict:
     text = result["text"]
     if not text:
         raise RuntimeError("SDK websearch returned empty text")
-
-    _emit("websearch", "search_end",
-          {"query": query_text[:80], "text_len": len(text)})
     return {
         "query": query_text,
         "results": text.strip(),
         "timestamp": time.time(),
     }
+
+
+def websearch(query_text: str, max_tokens: int = 4000) -> dict:
+    """Web search via Agent SDK. Returns {query, results, timestamp[, error]}.
+
+    Never raises: web search is optional augmentation, so a failure returns an
+    empty, error-tagged result instead of aborting the caller. Once a query
+    proves web search is unavailable in this runtime, a process-wide latch makes
+    every later query degrade immediately (no SDK call, no retry) so the screen
+    isn't flooded and the run isn't stalled on doomed searches.
+    """
+    global _WEBSEARCH_UNAVAILABLE
+    _emit("websearch", "search_start", {"query": query_text[:80]})
+
+    if _WEBSEARCH_UNAVAILABLE:
+        return _degraded_websearch(
+            query_text, "web search unavailable in this runtime (latched after an earlier failure)"
+        )
+
+    try:
+        result = _websearch_once(query_text, max_tokens)
+        _emit("websearch", "search_end",
+              {"query": query_text[:80], "text_len": len(result["results"])})
+        return result
+    except (json.JSONDecodeError, VisibilityContractError):
+        raise
+    except Exception as e:
+        _WEBSEARCH_UNAVAILABLE = True
+        _emit("websearch", "search_unavailable",
+              {"query": query_text[:80], "error": f"{type(e).__name__}: {str(e)[:150]}"})
+        return _degraded_websearch(query_text, f"{type(e).__name__}: {str(e)[:200]}")

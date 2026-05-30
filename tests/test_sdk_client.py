@@ -238,6 +238,7 @@ def test_call_claude_empty_text_raises():
 
 def test_websearch_returns_expected_shape():
     from ai_escape_mrc import sdk_client
+    sdk_client._WEBSEARCH_UNAVAILABLE = False  # avoid latch leakage between tests
     msgs = [
         FakeAssistantMessage([FakeTextBlock("- result 1\n- result 2")]),
         FakeResultMessage(),
@@ -251,6 +252,48 @@ def test_websearch_returns_expected_shape():
     assert out["query"] == "site:example.com topic"
     assert "- result 1" in out["results"]
     assert isinstance(out["timestamp"], float)
+
+
+def test_websearch_does_not_use_bypass_permissions():
+    """websearch must use least-privilege allowed_tools, not bypassPermissions."""
+    from ai_escape_mrc import sdk_client
+    sdk_client._WEBSEARCH_UNAVAILABLE = False
+    captured = {}
+
+    def fake_query(*, prompt, options=None, **_):
+        captured["options"] = options
+        return _async_iter([FakeAssistantMessage([FakeTextBlock("ok")]), FakeResultMessage()])
+
+    with patch("ai_escape_mrc.sdk_client.query", side_effect=fake_query):
+        sdk_client.websearch("topic")
+    opts = captured["options"]
+    assert opts.allowed_tools == ["WebSearch"]
+    assert getattr(opts, "permission_mode", None) in (None, "default")
+
+
+def test_websearch_latches_after_failure_and_skips_sdk():
+    """After one query fails, later queries degrade immediately without calling SDK."""
+    from ai_escape_mrc import sdk_client
+    sdk_client._WEBSEARCH_UNAVAILABLE = False
+    calls = {"n": 0}
+
+    def boom(*, prompt, options=None, **_):
+        calls["n"] += 1
+        raise RuntimeError("transport down")
+
+    try:
+        with patch("ai_escape_mrc.sdk_client.query", side_effect=boom):
+            first = sdk_client.websearch("q1")
+            calls_after_first = calls["n"]
+            second = sdk_client.websearch("q2")
+    finally:
+        sdk_client._WEBSEARCH_UNAVAILABLE = False
+
+    # First query degraded (did not raise) and carries an error tag.
+    assert first["results"] == "" and "error" in first
+    assert second["results"] == "" and "error" in second
+    # The second query must NOT have hit the SDK (latch short-circuit).
+    assert calls["n"] == calls_after_first
 
 
 def test_visibility_contract_errors_are_not_retried():
