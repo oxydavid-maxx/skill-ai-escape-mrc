@@ -101,9 +101,9 @@ def validate_phase9_plan(
 
     # Predicate 2: size check
     size = plan_path.stat().st_size
-    if size <= min_bytes:
+    if size < min_bytes:
         raise Phase9OutputContractError(
-            f"plan.md too small: {size} bytes <= {min_bytes} bytes threshold",
+            f"plan.md too small: {size} bytes < {min_bytes} bytes threshold",
             predicate="min_size",
         )
 

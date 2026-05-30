@@ -97,8 +97,13 @@ async def _sdk_query(
     schema: dict | None,
     timeout_sec: int,
     max_turns: int,
+    allow_tools: bool = False,
 ) -> dict:
     """Run one SDK query with skill-ai-escape-mrc's standard options.
+
+    When ``allow_tools`` is true the WebSearch tool is permitted so audit
+    phases can verify/benchmark claims mid-round (matches the prompts that
+    instruct the model to "Use WebSearch ..."). Otherwise no tools are allowed.
 
     Returns the dict produced by `_collect_messages`.
     Raises asyncio.TimeoutError on timeout.
@@ -106,10 +111,12 @@ async def _sdk_query(
     opts_kwargs: dict[str, Any] = dict(
         system_prompt=system_prompt,
         setting_sources=None,
-        allowed_tools=[],
+        allowed_tools=["WebSearch"] if allow_tools else [],
         max_turns=max_turns,
         env=dict(_SDK_ENV),
     )
+    if allow_tools:
+        opts_kwargs["permission_mode"] = "bypassPermissions"
     if model:
         opts_kwargs["model"] = model
     if schema is not None:
@@ -252,11 +259,12 @@ def call_claude(
       - json_schema != None -> dict (schema-conformant)
       - parse_json=True     -> dict (best-effort JSON parse)
 
-    `max_tokens`, `temperature`, `allow_tools` are accepted for signature
-    compatibility with the legacy caller. The SDK version ignores
-    max_tokens/temperature (delegated to the claude CLI's own model config);
-    `allow_tools` is currently unused because this skill never needs
-    WebSearch inside a schema call (websearch() is the dedicated path).
+    `max_tokens`, `temperature` are accepted for signature compatibility with
+    the legacy caller; the SDK version ignores them (delegated to the claude
+    CLI's own model config). `allow_tools=True` permits the WebSearch tool for
+    the duration of the call so audit phases can verify claims in-round (and
+    bumps max_turns to leave room for the tool_use/tool_result cycle on top of
+    any schema cycle).
 
     On SDK failure: raises. No provider-level fallback. @retry(3x) handles
     transient transport errors; deterministic failures propagate.
@@ -271,7 +279,8 @@ def call_claude(
         model=model,
         schema=json_schema,
         timeout_sec=timeout_sec,
-        max_turns=3,
+        max_turns=5 if allow_tools else 3,
+        allow_tools=allow_tools,
     ))
 
     if json_schema is not None:

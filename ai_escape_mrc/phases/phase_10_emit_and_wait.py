@@ -25,19 +25,34 @@ def phase_10_emit_and_wait(state: dict) -> dict:
         operator_email=state.get("operator_email"),
     )
 
-    try:
-        from ai_escape_mrc.delivery.email import send_consolidated_email
+    if not recipients.to:
+        # No resolvable recipient: do not attempt a send with an empty "To"
+        # (which silently fails inside Outlook). Surface it loudly instead so
+        # the final block prints the manual-fallback paths.
+        delivery = {
+            "ok": False,
+            "channel": "skipped_no_recipient",
+            "to": "",
+            "cc": list(recipients.cc),
+            "source": recipients.source,
+            "message": "",
+            "error": "no recipient resolved (set CLAUDE_AI_ESCAPE_MRC_USER_EMAIL "
+                      "or operator email); report/plan written but not emailed",
+        }
+    else:
+        try:
+            from ai_escape_mrc.delivery.email import send_consolidated_email
 
-        delivery = send_consolidated_email(
-            report_path=report_path,
-            plan_path=plan_path,
-            run_id=run_id,
-            recipients=recipients,
-            stage_summaries_path=state.get("stage_summaries_path"),
-            stage_summaries_inline=state.get("screen_summary"),
-        )
-    except Exception as exc:
-        delivery = _delivery_exception(exc, recipients)
+            delivery = send_consolidated_email(
+                report_path=report_path,
+                plan_path=plan_path,
+                run_id=run_id,
+                recipients=recipients,
+                stage_summaries_path=state.get("stage_summaries_path"),
+                stage_summaries_inline=state.get("screen_summary"),
+            )
+        except Exception as exc:
+            delivery = _delivery_exception(exc, recipients)
 
     delivery = _normalize_delivery_result(delivery, recipients)
     delivery_status_path = run_dir / "delivery-status.json"

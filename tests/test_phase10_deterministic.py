@@ -51,6 +51,7 @@ def test_phase10_delivery_survives_llm_down(tmp_path):
         "plan_path": str(plan_path),
         "report_path": str(report_path),
         "actions_count": 1,
+        "user_email": "requester@example.com",
     }
 
     from ai_escape_mrc.phases import phase_9_write_plan as _p9_mod
@@ -93,6 +94,7 @@ def test_phase10_delivery_status_schema_has_required_fields(tmp_path):
         "plan_path": str(plan_path),
         "report_path": str(report_path),
         "actions_count": 1,
+        "user_email": "requester@example.com",
     }
 
     required_fields = {
@@ -118,3 +120,48 @@ def test_phase10_delivery_status_schema_has_required_fields(tmp_path):
     assert not missing, f"Delivery status missing required fields: {missing}"
     assert doc["email_delivery_result"] == "failed"
     assert doc["email_delivery_error"] == "mailbox unavailable"
+
+
+def test_phase10_skips_send_when_no_recipient(tmp_path, monkeypatch):
+    """No resolvable recipient: do not attempt a send with an empty To; mark failed."""
+    # Ensure the environment provides no operator/user email fallback.
+    for var in (
+        "CLAUDE_AI_ESCAPE_MRC_USER_EMAIL",
+        "CLAUDE_AI_ESCAPE_MRC_OPERATOR_EMAIL",
+        "CLAUDE_AI_ESCAPE_MRC_EMAIL",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+    run_id = "run-test-no-recipient-001"
+    run_dir = tmp_path / run_id
+    run_dir.mkdir()
+    plan_path = run_dir / "plan.md"
+    plan_path.write_text("# Plan\n\n## Task 1: x\n", encoding="utf-8")
+    report_path = run_dir / "report.md"
+    report_path.write_text("# Report\n", encoding="utf-8")
+
+    state = {
+        "run_id": run_id,
+        "run_dir": str(run_dir),
+        "plan_path": str(plan_path),
+        "report_path": str(report_path),
+        "actions_count": 1,
+    }
+
+    called = {"sent": False}
+
+    def _should_not_send(*args, **kwargs):
+        called["sent"] = True
+        raise AssertionError("send_consolidated_email must not be called with no recipient")
+
+    with patch("ai_escape_mrc.delivery.email.send_consolidated_email",
+               side_effect=_should_not_send), \
+         patch("ai_escape_mrc.phases.phase_10_emit_and_wait.resolve_delivery_recipients",
+               return_value=__import__("ai_escape_mrc.delivery.recipients", fromlist=["DeliveryRecipients"]).DeliveryRecipients(to="", source="missing")):
+        result = phase_10_emit_and_wait(state)
+
+    assert called["sent"] is False
+    doc = json.loads(Path(result["delivery_status_path"]).read_text(encoding="utf-8"))
+    assert doc["email_delivery_result"] == "failed"
+    assert doc["email_delivery"]["channel"] == "skipped_no_recipient"
+    assert result["phase_10_complete"] is True

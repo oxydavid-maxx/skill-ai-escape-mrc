@@ -180,8 +180,11 @@ def _current_phase(events: list[dict[str, Any]]) -> str | None:
             current = phase
         elif name == "phase_end" and phase == current:
             current = None
-        elif name == "phase_error" and isinstance(phase, str):
-            current = phase
+        elif name == "phase_error":
+            # The phase aborted; it is no longer "currently running". Status is
+            # reported as "error" from the last event, and the failing phase is
+            # carried in that event's own "phase" field.
+            current = None
     return current
 
 

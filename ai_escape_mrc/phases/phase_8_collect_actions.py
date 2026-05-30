@@ -24,14 +24,17 @@ _QUADRANT_LABELS = {
 }
 
 
-def _normalize_action(action: Any, source_quadrant: str) -> dict[str, Any]:
+_DEFAULT_OWNER = "unassigned"
+
+
+def _normalize_action(action: Any, source_quadrant: str, default_owner: str = _DEFAULT_OWNER) -> dict[str, Any]:
     """Normalize either a dict or an LLM-returned string into the action schema."""
     if isinstance(action, dict):
         return {
             "title": action.get("title") or action.get("action") or "",
             "description": action.get("description") or action.get("action") or "",
             "files_touched": action.get("files") or action.get("files_touched") or [],
-            "owner": action.get("owner", "kuangyu"),
+            "owner": action.get("owner") or default_owner,
             "priority": action.get("priority", "medium"),
             "source_quadrant": source_quadrant,
         }
@@ -41,7 +44,7 @@ def _normalize_action(action: Any, source_quadrant: str) -> dict[str, Any]:
         "title": text[:80],
         "description": text,
         "files_touched": [],
-        "owner": "kuangyu",
+        "owner": default_owner,
         "priority": "medium",
         "source_quadrant": source_quadrant,
     }
@@ -50,6 +53,12 @@ def _normalize_action(action: Any, source_quadrant: str) -> dict[str, Any]:
 def phase_8_collect_actions(state: dict) -> dict:
     run_dir = Path(state["run_dir"])
     actions_path = run_dir / "actions.json"
+    # Owner defaults to the operator/requester from state, not a hardcoded name.
+    default_owner = (
+        state.get("operator_email")
+        or state.get("user_email")
+        or _DEFAULT_OWNER
+    )
     out: list[dict[str, Any]] = []
 
     # Real ai_escape_mrc state shape (per state.py + phase_4_actions.py):
@@ -62,19 +71,19 @@ def phase_8_collect_actions(state: dict) -> dict:
     for quadrant_key, label in _QUADRANT_LABELS.items():
         c = corrective.get(quadrant_key)
         if c is not None:
-            out.append(_normalize_action(c, f"corrective:{label}"))
+            out.append(_normalize_action(c, f"corrective:{label}", default_owner))
         p = prevention.get(quadrant_key)
         if p is not None:
-            out.append(_normalize_action(p, f"prevention:{label}"))
+            out.append(_normalize_action(p, f"prevention:{label}", default_owner))
 
     verification_plan = state.get("verification_plan")
     if verification_plan:
         if isinstance(verification_plan, dict):
             # Single verification plan dict ??flatten it as one action item
-            out.append(_normalize_action(verification_plan, "verification"))
+            out.append(_normalize_action(verification_plan, "verification", default_owner))
         elif isinstance(verification_plan, list):
             for item in verification_plan:
-                out.append(_normalize_action(item, "verification"))
+                out.append(_normalize_action(item, "verification", default_owner))
 
     actions_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"actions_path": str(actions_path), "actions_count": len(out), "phase_8_complete": True}

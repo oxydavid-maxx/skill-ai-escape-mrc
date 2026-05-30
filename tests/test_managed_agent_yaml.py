@@ -35,7 +35,7 @@ def test_required_keys_present():
 def test_model_is_opus_4_6():
     """Model must be claude-opus-4-6 (spec requirement for AI Escape MRC quality)."""
     doc = _load_yaml()
-    assert doc["model"] == "claude-opus-4-6", f"Unexpected model: {doc["model"]}"
+    assert doc["model"] == "claude-opus-4-6", f"Unexpected model: {doc['model']}"
 
 
 def test_tools_include_websearch_and_agent_toolset():

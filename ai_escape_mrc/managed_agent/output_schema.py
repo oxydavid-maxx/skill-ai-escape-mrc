@@ -9,7 +9,7 @@ class ActionItem(BaseModel):
     title: str = Field(..., min_length=1)
     description: str = Field(..., min_length=1)
     files_touched: list[str] = Field(default_factory=list)
-    owner: str = "kuangyu"
+    owner: str = "unassigned"
     priority: Literal["low", "medium", "high", "verification"] = "medium"
     source_quadrant: str
 
