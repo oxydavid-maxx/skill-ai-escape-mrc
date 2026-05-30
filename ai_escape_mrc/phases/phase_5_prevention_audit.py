@@ -10,7 +10,7 @@ from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc import schemas
 
-NUM_ROUNDS = 3
+NUM_ROUNDS = 2
 PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
 
 

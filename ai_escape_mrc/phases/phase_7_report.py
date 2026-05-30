@@ -42,6 +42,11 @@ def phase_7_report(state: dict) -> dict:
     #   phase has status != 'passed'. Operator-side EXEMPT via env var, with
     #   reason captured for audit trail.
     _assert_emission_prerequisites(state)
+
+    # Closure audit (pure Python) runs BEFORE render so the report can include
+    # the closure section in its deterministic body.
+    state["closure_audit"] = _run_closure_audit(state)
+
     rendered = _render_report(state)
     validate_no_legacy_identity_terms(rendered, artifact_name="report.md")
 
@@ -54,8 +59,6 @@ def phase_7_report(state: dict) -> dict:
     canonical.parent.mkdir(parents=True, exist_ok=True)
     canonical.write_text(rendered, encoding="utf-8")
     state["report_path"] = str(canonical)
-
-    state["closure_audit"] = _run_closure_audit(state)
 
     # Email-send migrated to phase_10_emit_and_wait as final delivery.
     # Per function-replacement-convention wiki: WIKI-CONSULTED: function-replacement-convention
@@ -179,19 +182,39 @@ def _canonical_report_path(state: dict) -> Path:
     return base / f"ai-escape-mrc-{date_str}-{slug}.md"
 
 
-def _render_report(state: dict) -> str:
+def _load_template() -> str:
     template_path = Path(__file__).parent.parent.parent / "templates" / "ai_escape_mrc_report_template.md"
-    template = template_path.read_text(encoding="utf-8") if template_path.exists() else ""
+    return template_path.read_text(encoding="utf-8") if template_path.exists() else ""
 
+
+def _render_report(state: dict) -> str:
+    """Render the report DETERMINISTICALLY from full state (no LLM, no timeout).
+
+    The prior implementation sent clipped state to one ~30-min LLM call, which
+    both lost fidelity (input clipped to 180 chars/leaf) and was the documented
+    Phase-7 timeout failure mode. The template is structured placeholders, so we
+    fill them directly from the un-clipped state via render.render_report.
+
+    A legacy all-LLM render remains as a defensive fallback only if the
+    deterministic output is implausibly short.
+    """
+    from ai_escape_mrc.render import render_report
+
+    template = _load_template()
+    rendered = render_report(state, template, state.get("closure_audit"))
+
+    if len(rendered) < 1500:
+        # Deterministic render produced almost nothing (unexpected state shape);
+        # fall back to the legacy LLM render so we still emit something.
+        return _legacy_llm_render(state, template)
+    return rendered
+
+
+def _legacy_llm_render(state: dict, template: str) -> str:
     # WIKI-CONSULTED: silent-staleness#misleading-metadata-trap
     # WIKI-FINDING: 600s default sdk_client timeout caused every Phase 7 on a
-    #   complex problem to TimeoutError after 10 min (observed 2026-04-25 on two
-    #   separate runs both with 123K-token input prompts). All Phase 0-6 work is
-    #   preserved in checkpoint.db but no report emitted.
-    # WIKI-ACTION: pass timeout_sec=1800 (30 min) for the report-render call. Matches
-    #   Anthropic API docs' 60-min inference default, halved for earlier stall signal.
-    #   Other phases still use the 600s default from sdk_client.call_claude.
-    rendered = call_claude(
+    #   complex problem to TimeoutError after 10 min. Kept as a fallback only.
+    return call_claude(
         model=model_for_role("report_generation"),
         system=(
             load_prompt("report_render")
@@ -202,10 +225,9 @@ def _render_report(state: dict) -> str:
         ),
         user=json.dumps(_state_summary(state), ensure_ascii=False),
         max_tokens=8000,
-        purpose="phase_7_report_render",
+        purpose="phase_7_report_render_fallback",
         timeout_sec=1800,
     )
-    return rendered
 
 
 def _state_summary(state: dict) -> dict:

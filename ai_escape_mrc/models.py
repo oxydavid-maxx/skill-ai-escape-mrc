@@ -10,37 +10,35 @@ import os
 
 ENVIRONMENT_DEFAULT_MODEL_LABEL = "environment-default"
 
-# Roles whose output is low-stakes/structural — they only feed web-search
-# queries or coarse categorization, never the final report prose or the audits.
-# These may safely run on a faster model without changing report depth.
-# Everything else (is_isnt, why_*, audits, actions, verification, report,
-# plan) stays on the session default (strong) model.
-_FAST_ROLES = frozenset({
-    "keyword_extraction",
-    "meta_categorization",
-    "simple_classification",
+# Quality-bearing roles that MUST stay on the strong session-default model.
+# The audits are the core reasoning; they re-examine earlier phases' output, so
+# they also act as a safety net when cheaper phases run on a faster model.
+_STRONG_ROLES = frozenset({
+    "rc_audit",
+    "prevention_audit",
+    "report_generation",
 })
 
-# Opt-in only: set CLAUDE_AI_ESCAPE_MRC_FAST_MODEL to a model id (e.g. a Haiku
-# or Sonnet id) to route the structural roles to it. Unset -> no override
-# (every role uses the session default, i.e. the original behavior). Kept as an
-# env var rather than a hardcoded id to avoid stale model-id drift.
+# Opt-in only: set CLAUDE_AI_ESCAPE_MRC_FAST_MODEL to a model id (e.g. a Sonnet
+# id) to route every NON-strong role to it. Unset -> no override (every role
+# uses the session default, i.e. the original behavior). Kept as an env var
+# rather than a hardcoded id to avoid stale model-id drift.
 _FAST_MODEL_ENV = "CLAUDE_AI_ESCAPE_MRC_FAST_MODEL"
 
 
 def model_for_role(role: str) -> str | None:
     """Return an explicit model override for a role, or ``None`` for default.
 
-    Returns ``None`` (use the active CLI/session model) for every role unless
-    BOTH (a) ``role`` is a low-stakes structural role and (b) the operator has
-    opted in via ``CLAUDE_AI_ESCAPE_MRC_FAST_MODEL``. This keeps the strong
-    model on all quality-bearing phases while letting cheap phases run faster.
+    Returns ``None`` (use the active CLI/session strong model) for the audit /
+    report roles, and for ALL roles when the operator has not opted in. When
+    ``CLAUDE_AI_ESCAPE_MRC_FAST_MODEL`` is set, every non-strong (structural /
+    first-pass-reasoning) role is routed to that faster model to cut runtime
+    while the audits keep the strong model and re-check their output.
     """
-    if role in _FAST_ROLES:
-        fast = (os.environ.get(_FAST_MODEL_ENV) or "").strip()
-        if fast:
-            return fast
-    return None
+    if role in _STRONG_ROLES:
+        return None
+    fast = (os.environ.get(_FAST_MODEL_ENV) or "").strip()
+    return fast or None
 
 
 def model_label(model: str | None) -> str:

@@ -15,7 +15,7 @@ from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc import schemas
 
-NUM_ROUNDS = 3
+NUM_ROUNDS = 2
 
 
 def phase_3_rc_audit(state: dict) -> dict:
