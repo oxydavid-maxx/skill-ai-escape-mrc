@@ -44,6 +44,11 @@ _SDK_ENV: dict[str, str] = {
     "CLAUDE_SDK_CALL": "1",
 }
 
+# Process-level latch: once a tool-enabled call proves tools cannot run in this
+# runtime, later calls skip the (failing, slow) tool attempt and go straight to
+# the tool-less path. Avoids burning a flaky subprocess spawn per audit call.
+_TOOLS_UNAVAILABLE = False
+
 
 def _emit(channel: str, event: str, payload: dict, **extra: Any) -> None:
     """Emit a required progress event."""
@@ -227,7 +232,7 @@ def _should_retry(retry_state) -> bool:
     return True
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30),
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=30),
        retry=_should_retry, reraise=True)
 def call_claude(
     model: str | None,
@@ -282,7 +287,8 @@ def call_claude(
             allow_tools=use_tools,
         ))
 
-    if allow_tools:
+    global _TOOLS_UNAVAILABLE
+    if allow_tools and not _TOOLS_UNAVAILABLE:
         # Tool use is optional augmentation (audit phases "Use WebSearch if ...").
         # If the tool-enabled call cannot run in this environment, degrade to a
         # tool-less call so the phase still produces real output instead of
@@ -292,6 +298,7 @@ def call_claude(
         except (json.JSONDecodeError, VisibilityContractError):
             raise
         except Exception as tool_exc:
+            _TOOLS_UNAVAILABLE = True
             _emit("llm", "llm_tool_unavailable",
                   {"purpose": purpose, "error": f"{type(tool_exc).__name__}: {str(tool_exc)[:200]}"},
                   model=log_model)
@@ -329,7 +336,7 @@ def call_claude(
     return text
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(min=2, max=30),
+@retry(stop=stop_after_attempt(5), wait=wait_exponential(min=2, max=30),
        retry=_should_retry, reraise=True)
 def websearch(query_text: str, max_tokens: int = 4000) -> dict:
     """Web search via Agent SDK. Returns {query, results, timestamp}.
