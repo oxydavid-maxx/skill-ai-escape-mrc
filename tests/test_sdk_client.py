@@ -103,7 +103,8 @@ def test_sdk_query_passes_env_and_schema():
             timeout_sec=10, max_turns=3,
         ))
     opts = captured["options"]
-    assert opts.env == {"CLAUDECODE": "", "CLAUDE_SDK_CALL": "1"}
+    assert opts.env == {"CLAUDECODE": "", "CLAUDE_SDK_CALL": "1",
+                        "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK": "1"}
     assert opts.setting_sources is None
     assert opts.output_format == {"type": "json_schema", "schema": schema}
     assert opts.system_prompt == "s"

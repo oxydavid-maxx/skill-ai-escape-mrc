@@ -42,6 +42,9 @@ from ai_escape_mrc.models import model_label
 _SDK_ENV: dict[str, str] = {
     "CLAUDECODE": "",
     "CLAUDE_SDK_CALL": "1",
+    # Skip the SDK's per-spawn version-check HTTP round-trip — pure startup
+    # overhead, no effect on the call's output. Saves ~1-3s on every call.
+    "CLAUDE_AGENT_SDK_SKIP_VERSION_CHECK": "1",
 }
 
 # Process-level latch: once a tool-enabled call proves tools cannot run in this

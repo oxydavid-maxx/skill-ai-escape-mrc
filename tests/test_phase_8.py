@@ -4,9 +4,11 @@ from pathlib import Path
 from ai_escape_mrc.phases.phase_8_collect_actions import phase_8_collect_actions
 
 
-def test_extracts_corrective_prevention_verification(tmp_path):
-    """Reads real ai_escape_mrc state shape: corrective_actions / prevention_actions
-    keyed by q1_trc_nc..q4_mrc_nd, plus verification_plan as single dict.
+def test_extracts_corrective_prevention_only(tmp_path):
+    """Collects ONLY corrective + prevention actions (the implementation work).
+    verification_plan is NOT task-ified — it is a measurement plan and stays in
+    the report's Section C — so the plan (phase_9) can run in parallel with
+    verification (phase_6).
     """
     state = {
         "run_id": "test-run-1",
@@ -23,19 +25,20 @@ def test_extracts_corrective_prevention_verification(tmp_path):
             "q3_mrc_nc": {"action": "Charter for Z class", "files": ["g.md"]},
             "q4_mrc_nd": {"action": "Quarterly audit W", "files": ["h.sh"]},
         },
+        # verification_plan is present in state but must NOT be collected as a task.
         "verification_plan": {"action": "Verify all corrective+prevention via E2E"},
     }
     result = phase_8_collect_actions(state)
     actions_path = Path(result["actions_path"])
     assert actions_path.exists()
     data = json.loads(actions_path.read_text(encoding="utf-8"))
-    assert len(data) == 9  # 4 corrective + 4 prevention + 1 verification
+    assert len(data) == 8  # 4 corrective + 4 prevention, NO verification
     sources = {a["source_quadrant"] for a in data}
     assert sources == {
         "corrective:TRC-NC", "corrective:TRC-ND", "corrective:MRC-NC", "corrective:MRC-ND",
         "prevention:TRC-NC", "prevention:TRC-ND", "prevention:MRC-NC", "prevention:MRC-ND",
-        "verification",
     }
+    assert not any(a["source_quadrant"] == "verification" for a in data)
 
 
 def test_returns_empty_on_no_actions(tmp_path):

@@ -33,6 +33,8 @@ def test_graph_has_no_soa_phase_nodes():
 def test_graph_ends_at_phase_10_final_delivery():
     graph = build_graph().get_graph()
     edges = {(edge.source, edge.target) for edge in graph.edges}
-    assert ("phase_9_write_plan", "phase_10_emit_and_wait") in edges
+    # phase_7 (report) is the join of the verification ∥ plan branches and leads
+    # to final delivery.
+    assert ("phase_7_report", "phase_10_emit_and_wait") in edges
     assert any(source == "phase_10_emit_and_wait" and target == "__end__" for source, target in edges)
     assert not any(source == "phase_10_emit_and_wait" and target == "phase_11_execute" for source, target in edges)

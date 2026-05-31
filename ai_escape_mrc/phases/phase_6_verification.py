@@ -45,15 +45,17 @@ def phase_6_verification(state: dict) -> dict:
             "_fallback": True,
         }
 
-    state["verification_plan"] = plan
-
     # Backward-compat: old closure audit expects proof_of_action keyed by quadrant.
-    # Re-expose the table that way for any downstream consumer.
     per_q = {}
     for row in plan.get("quadrants", []) or []:
         if isinstance(row, dict) and row.get("quadrant"):
             per_q[row["quadrant"]] = row
-    state["proof_of_action"] = per_q
 
-    state["phase_6_complete"] = True
-    return state
+    # Return a PATCH (not the whole state): phase_6 runs in parallel with phase_9
+    # (plan), so it must only declare the keys it owns to avoid a concurrent-update
+    # conflict in LangGraph.
+    return {
+        "verification_plan": plan,
+        "proof_of_action": per_q,
+        "phase_6_complete": True,
+    }

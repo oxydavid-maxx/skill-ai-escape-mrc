@@ -44,10 +44,11 @@ def _route_after_rc_audit(state: dict) -> str:
 
 
 def _route_after_prev_audit(state: dict) -> str:
-    """REWORK + under the rework cap -> regenerate actions; else proceed."""
+    """REWORK + under the rework cap -> regenerate actions; else collect actions
+    (which then fans out to verification ∥ plan)."""
     if state.get("phase_5_verdict") == "REWORK" and state.get("phase_5_attempt_count", 0) <= _max_rework():
         return "phase_4_actions"
-    return "phase_6_verification"
+    return "phase_8_collect_actions"
 
 from ai_escape_mrc.phases.phase_0_research import phase_0_research
 from ai_escape_mrc.phases.phase_1_is_isnt import phase_1_is_isnt
@@ -121,16 +122,22 @@ def build_graph(checkpointer=None):
         {"phase_2_why_analysis": "phase_2_why_analysis", "phase_4_actions": "phase_4_actions"},
     )
     g.add_edge("phase_4_actions", "phase_5_prevention_audit")
-    # Prevention audit may loop back to phase_4 to regenerate actions (REWORK).
+    # Prevention audit may loop back to phase_4 to regenerate actions (REWORK);
+    # otherwise it proceeds to collect the finalized actions.
     g.add_conditional_edges(
         "phase_5_prevention_audit",
         _route_after_prev_audit,
-        {"phase_4_actions": "phase_4_actions", "phase_6_verification": "phase_6_verification"},
+        {"phase_4_actions": "phase_4_actions", "phase_8_collect_actions": "phase_8_collect_actions"},
     )
-    g.add_edge("phase_6_verification", "phase_7_report")
-    g.add_edge("phase_7_report", "phase_8_collect_actions")
+    # Tail parallelism: phase_6 (verification) and phase_9 (plan) both read the
+    # finalized actions and write independent artifacts, so they run concurrently
+    # after the actions are collected. phase_7 (report) is the join: it waits for
+    # both before rendering.
+    g.add_edge("phase_8_collect_actions", "phase_6_verification")
     g.add_edge("phase_8_collect_actions", "phase_9_write_plan")
-    g.add_edge("phase_9_write_plan", "phase_10_emit_and_wait")
+    g.add_edge("phase_6_verification", "phase_7_report")
+    g.add_edge("phase_9_write_plan", "phase_7_report")
+    g.add_edge("phase_7_report", "phase_10_emit_and_wait")
     g.add_edge("phase_10_emit_and_wait", END)
 
     return g.compile(checkpointer=checkpointer)

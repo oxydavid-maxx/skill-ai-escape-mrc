@@ -64,8 +64,12 @@ def phase_8_collect_actions(state: dict) -> dict:
     # Real ai_escape_mrc state shape (per state.py + phase_4_actions.py):
     #   corrective_actions: dict[quadrant_key, action_dict]
     #   prevention_actions: dict[quadrant_key, action_dict]
-    #   verification_plan: dict (single)
     # Quadrant keys: q1_trc_nc, q2_trc_nd, q3_mrc_nc, q4_mrc_nd
+    #
+    # Collects ONLY corrective + prevention actions (the implementation work) so
+    # the plan (phase_9) can run in parallel with verification (phase_6). The
+    # verification metrics are a measurement plan, not implementation tasks, and
+    # remain in full in the report's Section C (render._render_phase_6).
     corrective = state.get("corrective_actions") or {}
     prevention = state.get("prevention_actions") or {}
     for quadrant_key, label in _QUADRANT_LABELS.items():
@@ -75,15 +79,6 @@ def phase_8_collect_actions(state: dict) -> dict:
         p = prevention.get(quadrant_key)
         if p is not None:
             out.append(_normalize_action(p, f"prevention:{label}", default_owner))
-
-    verification_plan = state.get("verification_plan")
-    if verification_plan:
-        if isinstance(verification_plan, dict):
-            # Single verification plan dict ??flatten it as one action item
-            out.append(_normalize_action(verification_plan, "verification", default_owner))
-        elif isinstance(verification_plan, list):
-            for item in verification_plan:
-                out.append(_normalize_action(item, "verification", default_owner))
 
     actions_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"actions_path": str(actions_path), "actions_count": len(out), "phase_8_complete": True}
