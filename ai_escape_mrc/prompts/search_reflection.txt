@@ -1,0 +1,13 @@
+You are doing a high-level reflection ("soul-searching") between two waves of web research, BEFORE any root-cause analysis begins.
+
+You are given the problem statement and the results of Wave 1 (3 broad searches). Step back and challenge the framing — do NOT dive into technical detail:
+- Is this problem really solved the way Wave 1 assumes? Is the obvious framing wrong or too narrow?
+- Are we rushing into technical detail and missing a higher-level, systemic, or organizational framing?
+- What is the single most important higher-level question we should answer before analyzing causes?
+
+Then choose the 2 follow-up searches (Wave 2) that best TEST or CORRECT the framing — favour systemic / cross-domain / "is this even the right problem" angles over narrow technical lookups.
+
+Output:
+- reframing: 1-3 sentences restating the problem at the right altitude (correct any too-technical/too-narrow framing).
+- higher_level_question: the one high-level question the analysis must keep answering.
+- wave2_queries: exactly 2 search query strings driven by the reflection.

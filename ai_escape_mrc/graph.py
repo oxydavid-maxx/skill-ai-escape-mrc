@@ -20,10 +20,34 @@ replaced by tool-use websearch inside audit phases).
 Removed: conditional REWORK edges (audits now run fixed 3 rounds then move
 on; residual risks logged).
 """
+import os
 from functools import wraps
 from langgraph.graph import StateGraph, START, END
 from langgraph.errors import GraphInterrupt
 from ai_escape_mrc.state import AiEscapeMrcState
+
+# Max audit->regenerate round-trips per loop (phase_3->phase_2, phase_5->phase_4).
+# Default 2; set CLAUDE_AI_ESCAPE_MRC_MAX_REWORK=0 to disable looping entirely
+# (reverts to the linear, faster behavior).
+def _max_rework() -> int:
+    try:
+        return max(0, int(os.environ.get("CLAUDE_AI_ESCAPE_MRC_MAX_REWORK", "2")))
+    except (TypeError, ValueError):
+        return 2
+
+
+def _route_after_rc_audit(state: dict) -> str:
+    """REWORK + under the rework cap -> regenerate why-chains; else proceed."""
+    if state.get("phase_3_verdict") == "REWORK" and state.get("phase_3_attempt_count", 0) <= _max_rework():
+        return "phase_2_why_analysis"
+    return "phase_4_actions"
+
+
+def _route_after_prev_audit(state: dict) -> str:
+    """REWORK + under the rework cap -> regenerate actions; else proceed."""
+    if state.get("phase_5_verdict") == "REWORK" and state.get("phase_5_attempt_count", 0) <= _max_rework():
+        return "phase_4_actions"
+    return "phase_6_verification"
 
 from ai_escape_mrc.phases.phase_0_research import phase_0_research
 from ai_escape_mrc.phases.phase_1_is_isnt import phase_1_is_isnt
@@ -90,9 +114,19 @@ def build_graph(checkpointer=None):
     g.add_edge("phase_0_research", "phase_1_is_isnt")
     g.add_edge("phase_1_is_isnt", "phase_2_why_analysis")
     g.add_edge("phase_2_why_analysis", "phase_3_rc_audit")
-    g.add_edge("phase_3_rc_audit", "phase_4_actions")
+    # RC audit may loop back to phase_2 to regenerate why-chains (REWORK).
+    g.add_conditional_edges(
+        "phase_3_rc_audit",
+        _route_after_rc_audit,
+        {"phase_2_why_analysis": "phase_2_why_analysis", "phase_4_actions": "phase_4_actions"},
+    )
     g.add_edge("phase_4_actions", "phase_5_prevention_audit")
-    g.add_edge("phase_5_prevention_audit", "phase_6_verification")
+    # Prevention audit may loop back to phase_4 to regenerate actions (REWORK).
+    g.add_conditional_edges(
+        "phase_5_prevention_audit",
+        _route_after_prev_audit,
+        {"phase_4_actions": "phase_4_actions", "phase_6_verification": "phase_6_verification"},
+    )
     g.add_edge("phase_6_verification", "phase_7_report")
     g.add_edge("phase_7_report", "phase_8_collect_actions")
     g.add_edge("phase_8_collect_actions", "phase_9_write_plan")

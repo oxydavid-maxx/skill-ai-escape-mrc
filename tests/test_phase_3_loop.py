@@ -119,6 +119,35 @@ def test_audit_collects_residual_risks():
     assert result["phase_3_residual_risks"][0]["quadrant"] == "q3_mrc_nc"
 
 
+def test_audit_emits_rework_verdict_and_increments_attempt():
+    """A REWORK verdict must pass through (drives the graph loop back to phase_2)."""
+    def responder():
+        return {"round": 1, "verdict": "REWORK", "weaknesses": [
+            {"quadrant": "q1_trc_nc", "why_step_n": 1, "classification": "ADDRESSABLE",
+             "issue": "wrong altitude", "suggested_fix": "go systemic"}]}
+
+    ctx, _ = _patch_session(responder)
+    with ctx:
+        result = phase_3_rc_audit(_base_state())
+
+    assert result["phase_3_verdict"] == "REWORK"
+    assert result["phase_3_attempt_count"] == 1
+    assert result["phase_3_status"] == "passed"
+
+
+def test_fallback_round_never_drives_rework():
+    """A degraded (fallback) audit must NOT loop — forced to EXHAUSTED/failed."""
+    def boom():
+        raise RuntimeError("audit transport down")
+
+    ctx, _ = _patch_session(boom)
+    with ctx:
+        result = phase_3_rc_audit(_base_state())
+
+    assert result["phase_3_verdict"] == "EXHAUSTED"
+    assert result["phase_3_status"] == "failed"
+
+
 def test_audit_converges_when_no_addressable_weakness():
     """Quality-preserving early exit: a real round with no ADDRESSABLE weakness
     means further rounds add nothing, so the audit stops (still EXHAUSTED)."""

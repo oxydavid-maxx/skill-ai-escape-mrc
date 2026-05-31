@@ -52,6 +52,35 @@ def _safe_websearch(query_text: str) -> dict:
         }
 
 
+def _reflect_on_framing(state: dict, problem: str, wave1_results: list) -> dict:
+    """High-level reflection between search waves. Returns a dict with
+    reframing / higher_level_question / wave2_queries. Best-effort: on failure
+    returns an empty-ish dict so Phase 0 can fall back to default wave-2 queries."""
+    findings = ""
+    for r in wave1_results:
+        if isinstance(r, dict):
+            findings += f"- Q: {r.get('query', '')}\n  {str(r.get('results', ''))[:400]}\n"
+    user_msg = (
+        f"Problem:\n{problem}\n\n"
+        f"Wave 1 search findings:\n{findings or '(no results retrieved)'}\n\n"
+        "Reflect at the framing level and choose 2 follow-up searches."
+    )
+    try:
+        out = call_claude(
+            model=model_for_role("search_reflection"),
+            system=load_prompt("search_reflection"),
+            user=user_msg,
+            json_schema=schemas.SEARCH_REFLECTION,
+            purpose="search_reflection",
+        )
+        return out if isinstance(out, dict) else {}
+    except VisibilityContractError:
+        raise
+    except Exception as e:
+        sys.stderr.write(f"[WARN] search reflection failed: {str(e)[:150]}; using default wave-2 queries\n")
+        return {}
+
+
 def phase_0_research(state: dict) -> dict:
     problem = state["problem"]
 
@@ -118,46 +147,65 @@ def phase_0_research(state: dict) -> dict:
         f"Cross-domain analogies: {', '.join(meta['domains'][:3])}.",
     )
 
-    # Build full websearch query list and run in parallel.
-    # Order is preserved by parallel_map so we can slice back into sections.
-    specific_queries = [
+    # Two-wave research: Wave 1 is deliberately BROAD/high-level (not just the
+    # technical-specific lookup); then a "soul-searching" reflection challenges
+    # the framing and chooses Wave 2's follow-up queries. Both waves are
+    # consumed downstream (the old single-batch left meta/cross-domain orphaned).
+    category0 = meta["categories"][0] if meta.get("categories") else kw_str
+    domain0 = meta["domains"][0] if meta.get("domains") else "another industry"
+    wave1_queries = [
         f"how to solve {kw_str}",
-        f"{kw_str} best practices 2026",
+        f"{category0} how is this class of problem actually solved",
+        f"how does {domain0} solve {category0}",
     ]
-    meta_queries = [
-        f"{category} site:{site}"
-        for category in meta["categories"]
-        for site in PROMINENT_SITES
-    ]
-    # Cross-domain: limit to 1 domain to save latency. First domain is most
-    # semantically distant per Opus's ordering (reduced from 3 to 1).
-    cross_queries = [
-        f"how does {domain} solve {meta['categories'][0]}"
-        for domain in meta["domains"][:1]
-    ]
-
-    all_queries = specific_queries + meta_queries + cross_queries
     emit_stage_progress(
         "phase_0_research",
         state,
-        "Running web research batch.",
-        f"Queries: {len(all_queries)} total ({len(specific_queries)} specific, "
-        f"{len(meta_queries)} meta, {len(cross_queries)} cross-domain).",
-        f"First query: {all_queries[0] if all_queries else '(none)'}",
+        "Web research wave 1 (broad / high-level).",
+        f"Queries: {len(wave1_queries)} (specific, problem-class, cross-domain).",
+        f"First query: {wave1_queries[0]}",
     )
-    all_results = parallel_map(_safe_websearch, all_queries, max_workers=5)
+    wave1_results = parallel_map(_safe_websearch, wave1_queries, max_workers=5)
+
+    # Soul-searching reflection between waves: is the framing right, or are we
+    # rushing into technical detail? Pick 2 follow-up searches to test/correct it.
+    reflection = _reflect_on_framing(state, problem, wave1_results)
+    state["framing_reflection"] = reflection
     emit_stage_progress(
         "phase_0_research",
         state,
-        "Web research batch complete.",
-        f"Results collected: {len(all_results)}.",
+        "Framing reflection complete.",
+        f"Higher-level question: {str(reflection.get('higher_level_question', ''))[:160]}",
+        f"Reframing: {str(reflection.get('reframing', ''))[:160]}",
     )
 
-    n_spec = len(specific_queries)
-    n_meta = len(meta_queries)
-    state["websearch_specific"] = all_results[:n_spec]
-    state["websearch_meta"] = all_results[n_spec:n_spec + n_meta]
-    state["websearch_cross_domain"] = all_results[n_spec + n_meta:]
+    wave2_queries = [q for q in (reflection.get("wave2_queries") or []) if isinstance(q, str) and q.strip()][:2]
+    if not wave2_queries:
+        # Defensive fallback if reflection produced no queries.
+        wave2_queries = [
+            f"{category0} systemic root cause prevention site:github.com",
+            f"{kw_str} post-mortem lessons learned",
+        ]
+    emit_stage_progress(
+        "phase_0_research",
+        state,
+        "Web research wave 2 (reflection-guided).",
+        f"Queries: {len(wave2_queries)} (driven by the framing reflection).",
+        f"First query: {wave2_queries[0]}",
+    )
+    wave2_results = parallel_map(_safe_websearch, wave2_queries, max_workers=5)
+
+    # All research is consumed: wave1+wave2 are the primary signal; the broad
+    # wave1[1:] (problem-class + cross-domain) is also kept for report citations.
+    state["websearch_specific"] = wave1_results + wave2_results
+    state["websearch_meta"] = wave1_results[1:2]
+    state["websearch_cross_domain"] = wave1_results[2:3]
+    emit_stage_progress(
+        "phase_0_research",
+        state,
+        "Web research complete (2 waves).",
+        f"Results collected: {len(wave1_results) + len(wave2_results)} ({len(wave1_results)} wave-1, {len(wave2_results)} wave-2).",
+    )
 
     # Wiki: index + up to 5 relevant concept pages (defensive)
     state["wiki_pages"] = []

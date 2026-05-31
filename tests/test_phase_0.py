@@ -39,6 +39,11 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
             "categories": ["silent failure detection", "pipeline invariants", "data freshness"],
             "domains": ["ETL engineering", "monitoring systems", "fault-tolerant logging"],
         },
+        "high-level reflection": {
+            "reframing": "This is a silent-failure detection gap, not a data bug.",
+            "higher_level_question": "Why did nothing alarm on an empty output?",
+            "wave2_queries": ["dead-man switch empty output detection", "alerting on absence of data"],
+        },
         "Pick up to 5 slug strings": {"slugs": ["silent-staleness"]},
     })
     websearch_mock = make_websearch_mock()
@@ -48,9 +53,14 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
         result = phase_0_research(dict(base_state))
 
     assert result["phase_0_complete"] is True
-    assert len(result["websearch_specific"]) == 2
-    assert len(result["websearch_meta"]) == 6  # 3 categories x 2 sites (reduced from 15)
-    assert len(result["websearch_cross_domain"]) == 1  # top domain only (reduced from 3)
+    # Two waves: 3 (wave 1) + 2 (wave 2) all consumed as the primary signal.
+    assert len(result["websearch_specific"]) == 5
+    assert len(result["websearch_meta"]) == 1
+    assert len(result["websearch_cross_domain"]) == 1
+    # The soul-searching reflection drove wave 2 and is stored for downstream phases.
+    assert result["framing_reflection"]["wave2_queries"] == [
+        "dead-man switch empty output detection", "alerting on absence of data"]
+    assert "silent-failure" in result["framing_reflection"]["reframing"].lower()
     assert len(result["meta_categories"]) == 3
     assert len(result["meta_domains"]) == 3
     assert len(result["wiki_pages"]) == 1
@@ -68,6 +78,8 @@ def test_phase_0_missing_wiki_does_not_crash(base_state, tmp_path, monkeypatch):
     call_claude_mock = make_call_claude_mock({
         "Extract 3-5 high-signal technical keywords": {"keywords": ["kw"]},
         "Emit 3 abstract problem-class names": {"categories": ["c1", "c2", "c3"], "domains": ["d1", "d2", "d3"]},
+        "high-level reflection": {"reframing": "r", "higher_level_question": "q",
+                                  "wave2_queries": ["w1", "w2"]},
     })
     with patch("ai_escape_mrc.phases.phase_0_research.call_claude", side_effect=call_claude_mock), \
          patch("ai_escape_mrc.phases.phase_0_research.websearch", side_effect=make_websearch_mock()):

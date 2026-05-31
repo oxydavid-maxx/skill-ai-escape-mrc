@@ -21,6 +21,7 @@ class AiEscapeMrcState(TypedDict, total=False):
     websearch_cross_domain: list[dict]
     meta_categories: list[str]
     meta_domains: list[str]
+    framing_reflection: dict  # soul-searching reflection between search waves
     wiki_pages: list[dict]
     memory_entries: list[dict]
 

@@ -31,14 +31,54 @@ def _run_quadrant_safe(state: dict, quadrant: str) -> dict:
         }
 
 
+def _framing_block(state: dict) -> str:
+    refl = state.get("framing_reflection") or {}
+    if not isinstance(refl, dict) or not (refl.get("higher_level_question") or refl.get("reframing")):
+        return ""
+    return (
+        "Higher-level framing to respect BEFORE diving into technical detail:\n"
+        f"- Reframing: {refl.get('reframing', '')}\n"
+        f"- Keep answering: {refl.get('higher_level_question', '')}\n\n"
+    )
+
+
+def _rework_block(state: dict, quadrant: str) -> str:
+    """On a loop-back (RC audit returned REWORK), give this quadrant its prior
+    chain + the auditor's critique so it REVISES rather than regenerates blind."""
+    rounds = state.get("phase_3_rounds") or []
+    prior = (state.get("why_chains") or {}).get(quadrant)
+    if not rounds or not isinstance(prior, dict):
+        return ""
+    latest = rounds[-1] if isinstance(rounds[-1], dict) else {}
+    critiques = [
+        w for w in (latest.get("weaknesses", []) or [])
+        if isinstance(w, dict) and w.get("quadrant") == quadrant
+        and w.get("classification") in ("ADDRESSABLE", None)
+    ]
+    crit_text = "\n".join(
+        f"  - [why {w.get('why_step_n')}] {w.get('issue', '')} -> fix: {w.get('suggested_fix', '')}"
+        for w in critiques
+    ) or "  - (no quadrant-specific critique; address the framing flaw)"
+    return (
+        "REVISION PASS (the audit sent this back for REWORK). Here is your prior "
+        "why-chain for this quadrant and the auditor's critique. Revise to address "
+        "EVERY critique, keep what is sound, and deepen where flagged — do not "
+        "start from scratch.\n"
+        f"Prior root: {prior.get('root', '')}\n"
+        f"Auditor critique:\n{crit_text}\n\n"
+    )
+
+
 def _run_quadrant(state: dict, quadrant: str) -> dict:
     user_msg = (
         f"Quadrant: {quadrant}\n"
         f"Problem: {state['problem']}\n\n"
+        f"{_framing_block(state)}"
+        f"{_rework_block(state, quadrant)}"
         f"IS/IS NOT:\n{state.get('is_isnt_table')}\n\n"
         f"Research context (top findings):\n"
     )
-    for s in state.get("websearch_specific", [])[:2]:
+    for s in state.get("websearch_specific", [])[:3]:
         user_msg += f"- {s['query']}: {s['results'][:200]}\n"
     for w in state.get("wiki_pages", [])[:2]:
         user_msg += f"- wiki: {w['path']}\n  {w['content'][:300]}\n"

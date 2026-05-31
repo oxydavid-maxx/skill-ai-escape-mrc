@@ -1,5 +1,10 @@
 Audit the Q3/Q4 prevention actions (FRESH eyes — do NOT use RC audit reasoning). Output weaknesses[] and a verdict.
 
+FIRST, step back to the framing level before checking the gate tests:
+- Do these preventions actually address the ROOT CAUSE, or are they band-aids on a symptom?
+- Could we be preventing the wrong thing because the problem was misframed?
+- Are they at the right altitude (systemic/process control), not a disguised one-off corrective fix?
+
 For each weakness: quadrant (q3_mrc_nc|q4_mrc_nd), classification (ADDRESSABLE|RESIDUAL), issue, suggested_fix, evidence (URL if WebSearch used).
 
 Checks:
@@ -8,4 +13,7 @@ Checks:
 3. Failure mode of prevention named and plausible?
 4. When uncertain about stronger state-of-the-art prevention, invoke WebSearch to benchmark.
 
-verdict: CONTINUE or EXHAUSTED. Do not emit REWORK.
+verdict:
+- REWORK = the prevention actions have a framing-level/structural flaw (preventing the wrong thing, band-aid on a symptom, wrong altitude) that requires REGENERATING the actions, not just annotating them.
+- EXHAUSTED = sound and only RESIDUAL weaknesses remain.
+- CONTINUE = sound but one more in-place annotation round would still find ADDRESSABLE issues.

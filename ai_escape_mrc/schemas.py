@@ -39,6 +39,21 @@ META_CATEGORIZATION = {
     "required": ["categories", "domains"],
 }
 
+SEARCH_REFLECTION = {
+    "type": "object",
+    "properties": {
+        "reframing": {"type": "string"},
+        "higher_level_question": {"type": "string"},
+        "wave2_queries": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 2,
+        },
+    },
+    "required": ["reframing", "higher_level_question", "wave2_queries"],
+}
+
 WIKI_SLUG_SELECTION = {
     "type": "object",
     "properties": {
@@ -118,7 +133,7 @@ RC_AUDIT = {
         },
         "verdict": {
             "type": "string",
-            "enum": ["CONTINUE", "EXHAUSTED"],
+            "enum": ["CONTINUE", "EXHAUSTED", "REWORK"],
         },
     },
     "required": ["round", "weaknesses", "verdict"],
@@ -185,7 +200,7 @@ PREVENTION_AUDIT = {
         },
         "verdict": {
             "type": "string",
-            "enum": ["CONTINUE", "EXHAUSTED"],
+            "enum": ["CONTINUE", "EXHAUSTED", "REWORK"],
         },
     },
     "required": ["round", "weaknesses", "verdict"],

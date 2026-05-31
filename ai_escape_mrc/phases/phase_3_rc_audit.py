@@ -15,7 +15,9 @@ from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc import schemas
 
-NUM_ROUNDS = 2
+# One internal critique per visit; the outer graph loop (phase_3 -> phase_2 on
+# REWORK) is now the real iteration.
+NUM_ROUNDS = 1
 
 
 def phase_3_rc_audit(state: dict) -> dict:
@@ -96,8 +98,17 @@ def phase_3_rc_audit(state: dict) -> dict:
     has_fallback_round = any(
         isinstance(r, dict) and r.get("_fallback") for r in state["phase_3_rounds"]
     )
-    state["phase_3_verdict"] = "EXHAUSTED"
+    # Emit the real verdict so the graph can loop back to phase_2 on REWORK.
+    # A degraded (fallback) audit is never allowed to drive a rework.
+    this_visit = state["phase_3_rounds"][-1] if state["phase_3_rounds"] else {}
+    raw_verdict = this_visit.get("verdict") if isinstance(this_visit, dict) else None
+    if has_fallback_round or raw_verdict != "REWORK":
+        verdict = "EXHAUSTED"
+    else:
+        verdict = "REWORK"
+    state["phase_3_verdict"] = verdict
     state["phase_3_status"] = "failed" if has_fallback_round else "passed"
+    state["phase_3_attempt_count"] = state.get("phase_3_attempt_count", 0) + 1
     state["phase_3_complete"] = True
     return state
 

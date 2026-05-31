@@ -19,8 +19,17 @@ def _stub_table(problem: str) -> dict:
 
 
 def phase_1_is_isnt(state: dict) -> dict:
+    refl = state.get("framing_reflection") or {}
+    framing = ""
+    if isinstance(refl, dict) and (refl.get("higher_level_question") or refl.get("reframing")):
+        framing = (
+            "Higher-level framing from research reflection:\n"
+            f"- Reframing: {refl.get('reframing', '')}\n"
+            f"- Higher-level question: {refl.get('higher_level_question', '')}\n\n"
+        )
     context = (
         f"Problem:\n{state['problem']}\n\n"
+        f"{framing}"
         f"Research highlights (first 3 specific searches):\n"
     )
     for s in state.get("websearch_specific", [])[:3]:

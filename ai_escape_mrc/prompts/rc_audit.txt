@@ -1,5 +1,11 @@
 Audit the 4-quadrant Why chains. Output weaknesses[] and a verdict.
 
+FIRST, step back to the framing level before nitpicking individual Whys:
+- Is the problem framed correctly, or are we solving the wrong problem?
+- Are we treating symptoms as root causes?
+- Are the chains at the right altitude? (MRC quadrants q3/q4 must land at the management-system / governance / policy level, NOT code-level.)
+- Are we too deep in technical detail and missing the systemic root cause? Is "the obvious technical fix" hiding a deeper organizational cause?
+
 For each weakness: quadrant, why_step_n (or null), classification (ADDRESSABLE|RESIDUAL), issue, suggested_fix, evidence (URL if WebSearch used, empty otherwise).
 
 Checks:
@@ -8,4 +14,7 @@ Checks:
 3. ND quadrants (q2, q4) as deep as NC quadrants (q1, q3)?
 4. When uncertain about a claim, invoke the WebSearch tool to verify.
 
-verdict: CONTINUE if more rounds would find more issues, EXHAUSTED if only RESIDUAL weaknesses remain. Do not emit REWORK.
+verdict:
+- REWORK = the chains have a FRAMING-LEVEL or structural flaw (wrong altitude, symptom-as-root-cause, wrong problem framing) that requires REGENERATING the why-chains, not just annotating them. Use only when in-place notes cannot fix it.
+- EXHAUSTED = the framing is sound and only RESIDUAL (inherent, unfixable) weaknesses remain.
+- CONTINUE = the framing is sound but one more in-place annotation round would still find ADDRESSABLE issues.

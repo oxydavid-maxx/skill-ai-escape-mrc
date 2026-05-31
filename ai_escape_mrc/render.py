@@ -239,6 +239,16 @@ def _render_closure(closure: Any) -> str:
     return "\n".join(out) if out else "_(no closure checks recorded)_"
 
 
+def _loop_note(state: dict, count_key: str, target: str) -> str:
+    """Report line documenting how many audit->regenerate round-trips occurred."""
+    visits = state.get(count_key, 0) or 0
+    reworks = max(0, visits - 1)
+    if reworks <= 0:
+        return f"_Audit ran once; no rework loop-back ({target} accepted first pass)._\n\n"
+    return (f"_Audit↔regenerate loop: {reworks} rework round-trip(s) "
+            f"({visits} audit visits) — {target} were regenerated on the auditor's REWORK verdict._\n\n")
+
+
 def render_report(state: dict, template: str, closure: Any = None) -> str:
     """Render the full AI Escape MRC report deterministically from state.
 
@@ -289,9 +299,11 @@ def render_report(state: dict, template: str, closure: Any = None) -> str:
         "{q4_metric}": metric("q4_mrc_nd"), "{q4_target}": target("q4_mrc_nd"),
         "{is_isnt_table_rendered}": _render_is_isnt(state.get("is_isnt_table")),
         "{why_chains_rendered}": _render_why_chains(chains),
-        "{phase_3_rounds_rendered}": _render_audit_rounds(state.get("phase_3_rounds")),
+        "{phase_3_rounds_rendered}": _loop_note(state, "phase_3_attempt_count", "why-chains")
+        + _render_audit_rounds(state.get("phase_3_rounds")),
         "{phase_4_rendered}": _render_phase_4(corrective, prevention),
-        "{phase_5_rounds_rendered}": _render_audit_rounds(state.get("phase_5_rounds")),
+        "{phase_5_rounds_rendered}": _loop_note(state, "phase_5_attempt_count", "prevention actions")
+        + _render_audit_rounds(state.get("phase_5_rounds")),
         "{phase_6_rendered}": _render_phase_6(state.get("verification_plan")),
         "{soa_citations_rendered}": _render_citations(state),
         "{closure_audit_rendered}": _render_closure(closure),

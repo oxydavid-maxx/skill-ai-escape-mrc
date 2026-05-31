@@ -35,12 +35,45 @@ def phase_4_actions(state: dict) -> dict:
     corrective_prompt = load_prompt("corrective_action")
     prevention_prompt = load_prompt("prevention_action")
 
+    # Capture prior prevention actions + latest audit BEFORE we reset state, so a
+    # phase_5 loop-back (REWORK) can REVISE rather than regenerate blind.
+    prior_prevention = dict(state.get("prevention_actions") or {})
+    p5_rounds = state.get("phase_5_rounds") or []
+    refl = state.get("framing_reflection") or {}
+    higher_q = refl.get("higher_level_question") if isinstance(refl, dict) else None
+
+    def _revision_for(q):
+        if q not in PREVENTION_QUADRANTS or not p5_rounds:
+            return None
+        prior = prior_prevention.get(q)
+        if not isinstance(prior, dict):
+            return None
+        latest = p5_rounds[-1] if isinstance(p5_rounds[-1], dict) else {}
+        crits = [
+            {"issue": w.get("issue"), "suggested_fix": w.get("suggested_fix")}
+            for w in (latest.get("weaknesses") or [])
+            if isinstance(w, dict) and w.get("quadrant") == q
+        ]
+        return {
+            "instruction": ("REVISION PASS: the prevention audit returned REWORK. Revise this "
+                            "prevention action to address every critique; keep what is sound; "
+                            "do not start from scratch."),
+            "prior_action": prior,
+            "auditor_critique": crits or "address the framing-level flaw the audit raised",
+        }
+
     def _build_payload(q):
-        return json.dumps({
+        payload = {
             "quadrant": q,
             "root_cause": state["why_chains"].get(q, {}),
             "problem": state["problem"],
-        }, ensure_ascii=False)
+        }
+        if higher_q:
+            payload["higher_level_question_to_respect"] = higher_q
+        revision = _revision_for(q)
+        if revision:
+            payload["revision"] = revision
+        return json.dumps(payload, ensure_ascii=False)
 
     def _corrective(q):
         try:
