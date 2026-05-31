@@ -119,6 +119,24 @@ def test_audit_collects_residual_risks():
     assert result["phase_3_residual_risks"][0]["quadrant"] == "q3_mrc_nc"
 
 
+def test_compact_chains_keeps_all_quadrants_and_clips_text():
+    from ai_escape_mrc.phases.phase_3_rc_audit import _compact_chains
+    import json as _json
+    chains = {
+        q: {"root": "root " + q, "whys": [{"n": i, "why": "x" * 1000} for i in range(1, 13)]}
+        for q in ("q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd")
+    }
+    out = _compact_chains(chains)
+    parsed = _json.loads(out)
+    # all 4 quadrants present (the bug was the audit only seeing q1)
+    assert set(parsed.keys()) == {"q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd"}
+    # all 12 whys per quadrant retained
+    assert all(len(parsed[q]["whys"]) == 12 for q in parsed)
+    # each why clipped, so the whole prompt stays small even with 4x12 long whys
+    assert all(len(w["why"]) <= 220 for q in parsed for w in parsed[q]["whys"])
+    assert len(out) < 15000
+
+
 def test_audit_emits_rework_verdict_and_increments_attempt():
     """A REWORK verdict must pass through (drives the graph loop back to phase_2)."""
     def responder():

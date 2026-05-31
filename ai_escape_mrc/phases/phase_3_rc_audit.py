@@ -44,7 +44,7 @@ def phase_3_rc_audit(state: dict) -> dict:
             user_msg = (
                 f"Round {round_num} of {NUM_ROUNDS}.\n\n"
                 f"Why chains (4 quadrants):\n"
-                f"{json.dumps(state['why_chains'], ensure_ascii=False)[:30000]}\n\n"
+                f"{_compact_chains(state['why_chains'])}\n\n"
                 "Use WebSearch if you want to verify or benchmark a specific claim."
             )
             try:
@@ -113,6 +113,32 @@ def phase_3_rc_audit(state: dict) -> dict:
     state["phase_3_attempt_count"] = state.get("phase_3_attempt_count", 0) + 1
     state["phase_3_complete"] = True
     return state
+
+
+def _compact_chains(why_chains: dict, max_why: int = 220) -> str:
+    """Compact-but-complete view for the audit: ALL 4 quadrants and ALL whys are
+    present (so the auditor never thinks a quadrant is 'missing'), but each why's
+    text is clipped so the prompt stays small and fast (avoids the old failure
+    where json.dumps[:6000] dropped 3 of 4 quadrants and json.dumps[:30000] blew
+    the timeout)."""
+    out = {}
+    for q, chain in (why_chains or {}).items():
+        if not isinstance(chain, dict):
+            out[q] = chain
+            continue
+        whys = []
+        for w in chain.get("whys", []) or []:
+            if not isinstance(w, dict):
+                whys.append(w)
+                continue
+            item = {"n": w.get("n"), "why": str(w.get("why", ""))[:max_why]}
+            if w.get("new_insight"):
+                item["insight"] = str(w["new_insight"])[:120]
+            if w.get("audit_notes"):
+                item["audit_notes"] = [str(n)[:120] for n in w["audit_notes"]]
+            whys.append(item)
+        out[q] = {"root": str(chain.get("root", ""))[:300], "whys": whys}
+    return json.dumps(out, ensure_ascii=False)
 
 
 def _has_addressable(audit: dict) -> bool:
