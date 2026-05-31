@@ -48,7 +48,7 @@ def phase_5_prevention_audit(state: dict) -> dict:
             user_msg = (
                 f"Round {round_num} of {NUM_ROUNDS}.\n\n"
                 f"Prevention actions (Q3, Q4 only):\n"
-                f"{json.dumps(preventions, ensure_ascii=False)[:5000]}\n\n"
+                f"{json.dumps(preventions, ensure_ascii=False)[:20000]}\n\n"
                 "Use WebSearch if you want to benchmark against state-of-the-art."
             )
             try:

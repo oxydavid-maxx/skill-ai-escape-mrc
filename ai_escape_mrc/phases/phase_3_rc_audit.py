@@ -44,7 +44,7 @@ def phase_3_rc_audit(state: dict) -> dict:
             user_msg = (
                 f"Round {round_num} of {NUM_ROUNDS}.\n\n"
                 f"Why chains (4 quadrants):\n"
-                f"{json.dumps(state['why_chains'], ensure_ascii=False)[:6000]}\n\n"
+                f"{json.dumps(state['why_chains'], ensure_ascii=False)[:30000]}\n\n"
                 "Use WebSearch if you want to verify or benchmark a specific claim."
             )
             try:
