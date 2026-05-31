@@ -128,11 +128,10 @@ class VisibilityReporter:
             patch["stage_summaries_path"] = str(md_path)
             entry["stage_summaries_path"] = str(md_path)
 
-        existing = self.state.get("stage_summaries")
-        if isinstance(existing, list):
-            patch["stage_summaries"] = [*existing, entry]
-        else:
-            patch["stage_summaries"] = [entry]
+        # Return only the DELTA; AiEscapeMrcState.stage_summaries uses an
+        # operator.add reducer, so concurrent (parallel-branch) appends merge
+        # correctly instead of raising InvalidUpdateError.
+        patch["stage_summaries"] = [entry]
         patch["visibility_receipt"] = entry
         return patch
 

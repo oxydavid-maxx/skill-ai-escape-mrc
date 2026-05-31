@@ -1,5 +1,13 @@
 """AiEscapeMrcState: LangGraph state schema for the AI Escape MRC FSM."""
-from typing import TypedDict, Literal, Optional
+import operator
+from typing import Annotated, TypedDict, Literal, Optional
+
+
+def _take_last(_a, b):
+    """Reducer: keep the most recent write (for keys touched by every node's
+    progress wrapper, so concurrent parallel branches don't raise
+    InvalidUpdateError)."""
+    return b
 
 
 class AiEscapeMrcState(TypedDict, total=False):
@@ -9,10 +17,13 @@ class AiEscapeMrcState(TypedDict, total=False):
     run_dir: str
     user_email: Optional[str]
     operator_email: Optional[str]
-    screen_summary: Optional[str]
-    stage_summaries: list[dict]
-    stage_summaries_path: Optional[str]
-    visibility_receipt: dict
+    # Visibility accumulators written by EVERY node's progress wrapper — given
+    # reducers so the tail's parallel branches (phase_6 ∥ phase_9) can both write
+    # them in the same super-step. stage_summaries receives per-node deltas.
+    screen_summary: Annotated[Optional[str], _take_last]
+    stage_summaries: Annotated[list[dict], operator.add]
+    stage_summaries_path: Annotated[Optional[str], _take_last]
+    visibility_receipt: Annotated[dict, _take_last]
 
     # Phase 0: forced research
     phase_0_complete: bool
