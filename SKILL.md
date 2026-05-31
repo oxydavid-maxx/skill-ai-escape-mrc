@@ -43,27 +43,34 @@ py -3 D:/D-claude/skills/skill-ai-escape-mrc/run_ai_escape_mrc_hidden.py "<autom
 
 ## Progress visibility (MANDATORY for the running agent)
 
-This run prints a `[AI Escape MRC] Phase X/10` block at every phase start, each
-step, and each phase summary. The user MUST see that progress as it happens.
-When you (an AI agent) launch this skill, follow these rules — they are part of
+This run prints a `[AI Escape MRC] Phase X/10` **stage-summary** block at every
+phase start, each step, and each phase summary, and persists them to
+`runs/<run_id>/stage-summaries.md`. The user MUST see those stage summaries as
+they happen. When you (an AI agent) launch this skill, these rules are part of
 the contract, not suggestions:
 
-1. **Default to foreground and let it stream.** Run `run_ai_escape_mrc.py`
-   directly and let its stderr flow back into the conversation. Surface the
-   phase blocks to the user as they appear.
+0. **Show the stage summaries VERBATIM. Never substitute your own log.** What
+   you surface to the user is the literal `[AI Escape MRC] Phase X` blocks
+   (from the run's stderr, from `--watch`, or from `runs/<id>/stage-summaries.md`).
+   Do NOT hand-roll, reformat, or summarize them into your own event log (e.g.
+   `[123s] ▶ phase_3 …`). The stage summary IS the deliverable the user wants to
+   read and forward to colleagues — reproduce it as-is.
+1. **The canonical way to surface progress is `--watch`.** Start the run
+   backgrounded with a fixed `--run-id <id>`, then attach
+   `run_ai_escape_mrc.py --watch <id>` — it streams exactly those stage-summary
+   blocks until the run finishes. Paste that stream to the user. (A short
+   foreground run may instead let stderr flow straight into the conversation.)
 2. **NEVER hide the stream.** Do not redirect stderr to a file-only sink (e.g.
    `nohup … > run.log 2>&1`) and then go quiet. Do not use `--detach` for an
    interactive/skill run. Hiding progress in a log the user can't see is a
    failure of this skill.
-3. **If the run is too long to hold a foreground shell, background it but stay
-   loud.** Start it with a fixed `--run-id <id>`, then continuously surface
-   progress one of two ways:
-   - attach a follower that streams live: `run_ai_escape_mrc.py --watch <id>`, or
-   - poll every ≤60 s: `run_ai_escape_mrc.py --status-json <id>`,
-   and **post each new phase transition, completed-phase summary, and stall
-   warning back to the user as it happens.** Do NOT wait until the end and dump
-   one final message — that is the exact anti-pattern this rule forbids.
-4. **The user must never have to tail logs themselves.** You relay progress.
+3. **Stay loud for the whole run.** Relay each new phase block as it lands (via
+   `--watch`, or by re-reading `runs/<id>/stage-summaries.md`, or a ≤60 s
+   `--status-json <id>` poll). Do NOT go silent and dump one final message at
+   the end — that is the exact anti-pattern this rule forbids.
+4. **The user must never have to tail logs themselves.** You relay the stage
+   summaries. (They always remain on disk at `runs/<id>/stage-summaries.md` as
+   the agent-independent source of truth.)
 
 Agent-mediated launch (background + live stream back to the conversation):
 

@@ -140,21 +140,25 @@ prints a `[AI Escape MRC] Phase X/10` block to stderr and is persisted to
 `runs/<run_id>/stage-summaries.md/.jsonl`. If a progress sink cannot be written
 the run fails closed rather than going silent.
 
+**The guaranteed, agent-independent way to see the stage summary** (works no
+matter how the run was launched, even if an agent backgrounded it):
+
+```bash
+# live, until the run finishes — streams the [AI Escape MRC] Phase X blocks:
+py -3 run_ai_escape_mrc.py --watch "<run_id>"
+# or just open / tail the durable file the run always writes:
+tail -f runs/<run_id>/stage-summaries.md
+```
+
+Other ways:
 - **Foreground (default):** progress streams to your terminal automatically —
-  no flags needed. This is the recommended way to run interactively.
-- **Re-attach / second terminal / relay a background run:** stream a run's live
-  phase/step summaries until it finishes with the main entrypoint's follower:
-
-  ```powershell
-  py -3 run_ai_escape_mrc.py --watch "<run_id>"
-  ```
-
+  no flags needed. Recommended for interactive runs.
 - **One-shot snapshot (polling):** `py -3 run_ai_escape_mrc.py --status-json "<run_id>"`.
 
-When an AI agent runs this skill it must keep the user in the loop: never
-redirect the stream to a hidden log and go quiet. If it backgrounds a long run,
-it must attach `--watch <id>` or poll `--status-json <id>` every ≤60 s and relay
-each phase transition and summary as it happens. See SKILL.md
+When an AI agent runs this skill it must surface those stage-summary blocks
+**verbatim** — never a hand-rolled/reformatted log, and never a hidden file with
+the agent going quiet. The durable `runs/<run_id>/stage-summaries.md` is the
+source of truth a colleague can always open directly. See SKILL.md
 "Progress visibility (MANDATORY for the running agent)".
 
 Useful flags:
