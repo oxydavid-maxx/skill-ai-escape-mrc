@@ -11,7 +11,7 @@ Checks:
 1. Gate test all 3 PASS? (scope, persistence, measurability)
 2. Hierarchy level 1-3? Or corrective-in-disguise?
 3. Failure mode of prevention named and plausible?
-4. When uncertain about stronger state-of-the-art prevention, invoke WebSearch to benchmark.
+4. When uncertain about stronger state-of-the-art prevention, invoke WebSearch to benchmark — but use it at most TWICE, only for the single most decisive claim. Do not exhaustively search; rely mainly on the provided research and your reasoning.
 
 verdict:
 - REWORK = the prevention actions have a framing-level/structural flaw (preventing the wrong thing, band-aid on a symptom, wrong altitude) that requires REGENERATING the actions, not just annotating them.

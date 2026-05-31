@@ -36,6 +36,8 @@ def phase_3_rc_audit(state: dict) -> dict:
         model=model_for_role("rc_audit"),
         schema=schemas.RC_AUDIT,
         allow_tools=True,
+        max_turns=3,        # cap WebSearch to ~1-2 per audit (avoids 200-470s blowups)
+        timeout_sec=240,    # bound the worst case; tool-less fallback on timeout
     ) as sess:
         for round_num in range(1, NUM_ROUNDS + 1):
             # Build prompt with current (possibly updated) why_chains.

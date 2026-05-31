@@ -53,10 +53,10 @@ def test_phase_0_populates_all_required_fields(base_state, tmp_path, monkeypatch
         result = phase_0_research(dict(base_state))
 
     assert result["phase_0_complete"] is True
-    # Two waves: 3 (wave 1) + 2 (wave 2) all consumed as the primary signal.
-    assert len(result["websearch_specific"]) == 5
-    assert len(result["websearch_meta"]) == 1
-    assert len(result["websearch_cross_domain"]) == 1
+    # Two waves: 5 (wave 1) + the reflection's wave-2 queries, all consumed.
+    assert len(result["websearch_specific"]) == 5 + 2  # mock reflection returns 2 wave-2 queries
+    assert len(result["websearch_meta"]) == 2          # wave1[1:3] problem-class
+    assert len(result["websearch_cross_domain"]) == 2  # wave1[3:5] cross-domain
     # The soul-searching reflection drove wave 2 and is stored for downstream phases.
     assert result["framing_reflection"]["wave2_queries"] == [
         "dead-man switch empty output detection", "alerting on absence of data"]

@@ -48,7 +48,7 @@ SEARCH_REFLECTION = {
             "type": "array",
             "items": {"type": "string"},
             "minItems": 2,
-            "maxItems": 2,
+            "maxItems": 4,
         },
     },
     "required": ["reframing", "higher_level_question", "wave2_queries"],

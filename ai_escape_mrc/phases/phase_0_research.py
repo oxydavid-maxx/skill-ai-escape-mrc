@@ -11,7 +11,7 @@ from pathlib import Path
 from ai_escape_mrc.errors import VisibilityContractError
 from ai_escape_mrc.sdk_client import call_claude, websearch
 from ai_escape_mrc.models import model_for_role
-from ai_escape_mrc.parallel import parallel_map
+from ai_escape_mrc.parallel import parallel_map, parallel_run
 from ai_escape_mrc.stage_summary import emit_stage_progress
 from ai_escape_mrc.utils import load_prompt, safe_read_text
 from ai_escape_mrc import schemas
@@ -63,7 +63,7 @@ def _reflect_on_framing(state: dict, problem: str, wave1_results: list) -> dict:
     user_msg = (
         f"Problem:\n{problem}\n\n"
         f"Wave 1 search findings:\n{findings or '(no results retrieved)'}\n\n"
-        "Reflect at the framing level and choose 2 follow-up searches."
+        "Reflect at the framing level and choose 3-4 follow-up searches."
     )
     try:
         out = call_claude(
@@ -81,16 +81,7 @@ def _reflect_on_framing(state: dict, problem: str, wave1_results: list) -> dict:
         return {}
 
 
-def phase_0_research(state: dict) -> dict:
-    problem = state["problem"]
-
-    # 0a: Problem-specific keywords (schema-constrained, defensive)
-    emit_stage_progress(
-        "phase_0_research",
-        state,
-        "Extracting problem keywords.",
-        f"Problem length: {len(problem)} characters.",
-    )
+def _extract_keywords(problem: str) -> list:
     try:
         kw_result = call_claude(
             model=model_for_role("keyword_extraction"),
@@ -100,24 +91,17 @@ def phase_0_research(state: dict) -> dict:
             purpose="keyword_extraction",
         )
         keywords = kw_result.get("keywords") if isinstance(kw_result, dict) else None
-        if not keywords:
-            raise ValueError(f"empty keywords from LLM: {kw_result!r}")
+        if keywords:
+            return keywords
+        raise ValueError(f"empty keywords from LLM: {kw_result!r}")
     except VisibilityContractError:
         raise
     except Exception as e:
-        import sys as _sys
-        _sys.stderr.write(f"[WARN] keyword_extraction failed: {str(e)[:150]}; using problem words\n")
-        keywords = problem.split()[:5]
-    kw_str = " ".join(keywords)
-    emit_stage_progress(
-        "phase_0_research",
-        state,
-        "Keyword extraction complete.",
-        f"Keywords: {', '.join(str(k) for k in keywords[:6])}.",
-    )
+        sys.stderr.write(f"[WARN] keyword_extraction failed: {str(e)[:150]}; using problem words\n")
+        return problem.split()[:5]
 
-    # 0b: Meta categorization (schema-constrained, defensive)
-    emit_stage_progress("phase_0_research", state, "Classifying meta failure categories.")
+
+def _categorize(problem: str) -> dict:
     try:
         meta = call_claude(
             model=model_for_role("meta_categorization"),
@@ -126,23 +110,40 @@ def phase_0_research(state: dict) -> dict:
             json_schema=schemas.META_CATEGORIZATION,
             purpose="meta_categorization",
         )
-        if not isinstance(meta, dict) or "categories" not in meta or "domains" not in meta:
-            raise ValueError(f"unexpected meta shape: {meta!r}")
+        if isinstance(meta, dict) and "categories" in meta and "domains" in meta:
+            return meta
+        raise ValueError(f"unexpected meta shape: {meta!r}")
     except VisibilityContractError:
         raise
     except Exception as e:
-        import sys as _sys
-        _sys.stderr.write(f"[WARN] meta_categorization failed: {str(e)[:150]}; using stubs\n")
-        meta = {
+        sys.stderr.write(f"[WARN] meta_categorization failed: {str(e)[:150]}; using stubs\n")
+        return {
             "categories": ["workflow orchestration", "state invariant enforcement", "observability"],
             "domains": ["aerospace fault tolerance", "manufacturing quality control", "financial workflow"],
         }
+
+
+def phase_0_research(state: dict) -> dict:
+    problem = state["problem"]
+
+    # 0a + 0b: keywords and meta-categorization are independent (both only read
+    # the raw problem) -> run them in parallel to shave a sequential LLM call.
+    emit_stage_progress(
+        "phase_0_research", state,
+        "Extracting keywords + meta categories (parallel).",
+        f"Problem length: {len(problem)} characters.",
+    )
+    keywords, meta = parallel_run(
+        [lambda: _extract_keywords(problem), lambda: _categorize(problem)],
+        max_workers=2,
+    )
+    kw_str = " ".join(keywords)
     state["meta_categories"] = meta["categories"]
     state["meta_domains"] = meta["domains"]
     emit_stage_progress(
-        "phase_0_research",
-        state,
-        "Meta categorization complete.",
+        "phase_0_research", state,
+        "Keyword + meta extraction complete.",
+        f"Keywords: {', '.join(str(k) for k in keywords[:6])}.",
         f"Categories: {', '.join(meta['categories'][:3])}.",
         f"Cross-domain analogies: {', '.join(meta['domains'][:3])}.",
     )
@@ -151,21 +152,27 @@ def phase_0_research(state: dict) -> dict:
     # technical-specific lookup); then a "soul-searching" reflection challenges
     # the framing and chooses Wave 2's follow-up queries. Both waves are
     # consumed downstream (the old single-batch left meta/cross-domain orphaned).
-    category0 = meta["categories"][0] if meta.get("categories") else kw_str
-    domain0 = meta["domains"][0] if meta.get("domains") else "another industry"
+    cats = meta.get("categories") or [kw_str]
+    doms = meta.get("domains") or ["another industry"]
+    category0 = cats[0]
+    domain0 = doms[0]
+    # Wave 1 widened to 5 (searches are parallel, so more ≈ ~free wall-clock):
+    # 1 specific + 2 problem-class + 2 cross-domain.
     wave1_queries = [
         f"how to solve {kw_str}",
         f"{category0} how is this class of problem actually solved",
+        f"{cats[1] if len(cats) > 1 else category0} systemic prevention best practices",
         f"how does {domain0} solve {category0}",
+        f"how does {doms[1] if len(doms) > 1 else domain0} prevent {category0}",
     ]
     emit_stage_progress(
         "phase_0_research",
         state,
         "Web research wave 1 (broad / high-level).",
-        f"Queries: {len(wave1_queries)} (specific, problem-class, cross-domain).",
+        f"Queries: {len(wave1_queries)} (specific + problem-class + cross-domain).",
         f"First query: {wave1_queries[0]}",
     )
-    wave1_results = parallel_map(_safe_websearch, wave1_queries, max_workers=5)
+    wave1_results = parallel_map(_safe_websearch, wave1_queries, max_workers=6)
 
     # Soul-searching reflection between waves: is the framing right, or are we
     # rushing into technical detail? Pick 2 follow-up searches to test/correct it.
@@ -179,7 +186,7 @@ def phase_0_research(state: dict) -> dict:
         f"Reframing: {str(reflection.get('reframing', ''))[:160]}",
     )
 
-    wave2_queries = [q for q in (reflection.get("wave2_queries") or []) if isinstance(q, str) and q.strip()][:2]
+    wave2_queries = [q for q in (reflection.get("wave2_queries") or []) if isinstance(q, str) and q.strip()][:4]
     if not wave2_queries:
         # Defensive fallback if reflection produced no queries.
         wave2_queries = [
@@ -193,13 +200,13 @@ def phase_0_research(state: dict) -> dict:
         f"Queries: {len(wave2_queries)} (driven by the framing reflection).",
         f"First query: {wave2_queries[0]}",
     )
-    wave2_results = parallel_map(_safe_websearch, wave2_queries, max_workers=5)
+    wave2_results = parallel_map(_safe_websearch, wave2_queries, max_workers=6)
 
     # All research is consumed: wave1+wave2 are the primary signal; the broad
-    # wave1[1:] (problem-class + cross-domain) is also kept for report citations.
+    # problem-class + cross-domain queries are also kept for report citations.
     state["websearch_specific"] = wave1_results + wave2_results
-    state["websearch_meta"] = wave1_results[1:2]
-    state["websearch_cross_domain"] = wave1_results[2:3]
+    state["websearch_meta"] = wave1_results[1:3]
+    state["websearch_cross_domain"] = wave1_results[3:5]
     emit_stage_progress(
         "phase_0_research",
         state,

@@ -375,12 +375,16 @@ class ClaudeSession:
 
     def __init__(self, *, system: str, model: str | None = None,
                  schema: dict | None = None, allow_tools: bool = False,
-                 timeout_sec: int = 600, max_attempts: int = 8):
+                 timeout_sec: int = 600, max_attempts: int = 8,
+                 max_turns: int | None = None):
         self._system = system.rstrip()
         self._model = model
         self._schema = schema
         self._timeout = timeout_sec
         self._max_attempts = max_attempts
+        # Optional cap on tool_use turns. Each WebSearch costs one turn, so a low
+        # value (e.g. 3) bounds how many times an audit can search the web mid-turn.
+        self._max_turns = max_turns
         # Honour the process-wide latch: never connect with tools we already
         # know cannot run in this runtime.
         self._tools = allow_tools and not _TOOLS_UNAVAILABLE
@@ -392,7 +396,7 @@ class ClaudeSession:
             system_prompt=self._system,
             setting_sources=None,
             allowed_tools=["WebSearch"] if self._tools else [],
-            max_turns=5 if self._tools else 3,
+            max_turns=self._max_turns if self._max_turns is not None else (5 if self._tools else 3),
             env=dict(_SDK_ENV),
         )
         if self._model:

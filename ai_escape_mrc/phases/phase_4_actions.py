@@ -112,13 +112,28 @@ def phase_4_actions(state: dict) -> dict:
                        "gate_test": {"scope": "FAIL", "persistence": "FAIL", "measurability": "FAIL"},
                        "hierarchy_level": 5, "_fallback": True}
 
-    tasks = (
-        [lambda q=q: _corrective(q) for q in CORRECTIVE_QUADRANTS]
-        + [lambda q=q: _prevention(q) for q in PREVENTION_QUADRANTS]
-    )
+    if p5_rounds and prior_prevention:
+        # Targeted rework from phase_5: corrective (Q1/Q2) is not audited by
+        # phase_5, so keep it unchanged; only regenerate the critiqued prevention
+        # quadrants (or all prevention if the REWORK was a pure framing verdict).
+        latest = p5_rounds[-1] if isinstance(p5_rounds[-1], dict) else {}
+        critiqued = {
+            w.get("quadrant") for w in (latest.get("weaknesses") or [])
+            if isinstance(w, dict) and w.get("quadrant") in PREVENTION_QUADRANTS
+        } or set(PREVENTION_QUADRANTS)
+        prev_to_run = [q for q in PREVENTION_QUADRANTS if q in critiqued]
+        tasks = [lambda q=q: _prevention(q) for q in prev_to_run]
+        # Preserve prior corrective + uncritiqued prevention.
+        state["corrective_actions"] = dict(state.get("corrective_actions") or {})
+        state["prevention_actions"] = dict(prior_prevention)
+    else:
+        tasks = (
+            [lambda q=q: _corrective(q) for q in CORRECTIVE_QUADRANTS]
+            + [lambda q=q: _prevention(q) for q in PREVENTION_QUADRANTS]
+        )
+        state["corrective_actions"] = {}
+        state["prevention_actions"] = {}
 
-    state["corrective_actions"] = {}
-    state["prevention_actions"] = {}
     for q, result in parallel_run(tasks, max_workers=4):
         normalized = _normalize_action_dict(result)
         if q in CORRECTIVE_QUADRANTS:

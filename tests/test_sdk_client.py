@@ -358,6 +358,25 @@ def test_claude_session_connects_once_for_multiple_turns():
     assert _FakeSDKClient.disconnect_count == 1
 
 
+def test_claude_session_max_turns_override():
+    """A max_turns override caps tool_use turns (used to bound audit WebSearch)."""
+    from ai_escape_mrc import sdk_client
+
+    captured = {}
+
+    class _OptCapture(_FakeSDKClient):
+        def __init__(self, options=None):
+            super().__init__(options=options)
+            captured["max_turns"] = getattr(options, "max_turns", None)
+
+    _FakeSDKClient.responses = [{"ok": 1}]
+    with patch("ai_escape_mrc.sdk_client.ClaudeSDKClient", _OptCapture):
+        with sdk_client.ClaudeSession(system="s", schema={"type": "object"},
+                                      allow_tools=True, max_turns=3, timeout_sec=10):
+            pass
+    assert captured["max_turns"] == 3
+
+
 def test_claude_session_text_mode_returns_string():
     from ai_escape_mrc import sdk_client
 

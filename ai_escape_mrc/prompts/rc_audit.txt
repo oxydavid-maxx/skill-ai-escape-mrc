@@ -12,7 +12,7 @@ Checks:
 1. Each Why a genuinely new causal insight or a rephrase?
 2. MRC quadrants (q3, q4) at management-system level (not code-level)?
 3. ND quadrants (q2, q4) as deep as NC quadrants (q1, q3)?
-4. When uncertain about a claim, invoke the WebSearch tool to verify.
+4. When uncertain about a claim, invoke the WebSearch tool to verify — but use it at most TWICE, only for the single most decisive claim. Do not exhaustively search; rely mainly on the provided research and your reasoning.
 
 verdict:
 - REWORK = the chains have a FRAMING-LEVEL or structural flaw (wrong altitude, symptom-as-root-cause, wrong problem framing) that requires REGENERATING the why-chains, not just annotating them. Use only when in-place notes cannot fix it.

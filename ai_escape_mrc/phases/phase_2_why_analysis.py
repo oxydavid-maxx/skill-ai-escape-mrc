@@ -8,9 +8,37 @@ from ai_escape_mrc.state import QUADRANTS
 from ai_escape_mrc import schemas
 
 
+def _critiqued_quadrants(state: dict) -> set:
+    rounds = state.get("phase_3_rounds") or []
+    if not rounds:
+        return set()
+    latest = rounds[-1] if isinstance(rounds[-1], dict) else {}
+    return {
+        w.get("quadrant") for w in (latest.get("weaknesses") or [])
+        if isinstance(w, dict) and w.get("quadrant") in QUADRANTS
+    }
+
+
 def phase_2_why_analysis(state: dict) -> dict:
-    results = parallel_map(lambda q: _run_quadrant_safe(state, q), QUADRANTS, max_workers=4)
-    state["why_chains"] = dict(zip(QUADRANTS, results))
+    prior = state.get("why_chains") or {}
+    is_rework = bool(prior) and bool(state.get("phase_3_rounds"))
+
+    if is_rework:
+        # Targeted rework: only regenerate the quadrants the audit actually
+        # critiqued; reuse the prior chain for the rest (no LLM call). If the
+        # REWORK carried no quadrant-specific weakness (pure framing verdict),
+        # regenerate all four.
+        targets = _critiqued_quadrants(state) or set(QUADRANTS)
+        to_run = [q for q in QUADRANTS if q in targets]
+        results = parallel_map(lambda q: _run_quadrant_safe(state, q), to_run, max_workers=4)
+        chains = dict(prior)
+        for q, r in zip(to_run, results):
+            chains[q] = r
+        state["why_chains"] = chains
+    else:
+        results = parallel_map(lambda q: _run_quadrant_safe(state, q), QUADRANTS, max_workers=4)
+        state["why_chains"] = dict(zip(QUADRANTS, results))
+
     state["phase_2_complete"] = True
     return state
 

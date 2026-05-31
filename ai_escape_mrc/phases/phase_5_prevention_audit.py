@@ -41,6 +41,8 @@ def phase_5_prevention_audit(state: dict) -> dict:
         model=model_for_role("prevention_audit"),
         schema=schemas.PREVENTION_AUDIT,
         allow_tools=True,
+        max_turns=3,        # cap WebSearch to ~1-2 per audit (avoids 200-470s blowups)
+        timeout_sec=240,    # bound the worst case; tool-less fallback on timeout
     ) as sess:
         for round_num in range(1, NUM_ROUNDS + 1):
             user_msg = (
