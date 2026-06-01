@@ -6,20 +6,38 @@ execution_mode: both
 variant_note: Standalone non-discussion variant; Paddy may maintain a separate discussion-oriented variant.
 ---
 
-# AI Escape MRC
+# skill-ai-escape-mrc — AI Agent / Automation False-Completion Root-Cause Audit & Prevention Plan
 
-Use this skill to review an AI harness or automation workflow that may have
-escaped its own guardrails: it claimed completion, generated artifacts, pushed a
-review, or announced success without proving that entrypoints, plugin links,
-tests, generated documentation, runtime artifact names, and delivery artifacts still
-matched the intended skill identity.
+> **TL;DR:** Run this when an AI agent, CI job, browser-automation, or codegen
+> flow announced "done" but you suspect it actually skipped verification, swapped
+> an entrypoint, broke a plugin link, or shipped a renamed-but-broken artifact.
+> You get an 11-phase 8D-style report + corrective + prevention plan delivered
+> by email in ~25 min.
 
-The implementation is a Python/LangGraph finite-state machine. Run the CLI
-entrypoint; do not manually improvise the phases from this document.
+## When to reach for this
 
-> Version note: this standalone copy is the non-discussion AI Escape MRC
-> variant. Paddy may maintain a separate discussion-oriented variant; keep that
-> as a separate skill/version if it is added later.
+- "Test passed" / "PR pushed" / "merged" claims with no proof artifact you can open
+- Skill / agent silently renamed an entrypoint or plugin link while keeping the success message
+- Generated docs, tests, or runtime artifact names no longer match the intended skill identity
+- Same automation failure class recurred — you want a root cause + a gate that blocks it from happening again
+- A managerial root cause review is owed (TRC + MRC quadrants, not just "we'll be more careful")
+
+## What you get back
+
+An emailed markdown report + implementation plan covering:
+
+1. **Phases 0–2** — dual-tier research, IS/IS-NOT scoping, four-quadrant why-analysis (TRC × MRC / NC × ND)
+2. **Phases 3–5** — root-cause audit with audit↔regenerate loop, corrective action matrix, prevention action matrix
+3. **Phases 6–10** — proof-of-action verification plan, report rendering, action collection, implementation plan, delivery
+
+Python / LangGraph finite-state machine. Run the CLI entrypoint below; do not
+manually improvise the phases from this document.
+
+> Version note: this is the standalone non-discussion AI Escape MRC variant.
+> A discussion-oriented variant may be maintained separately.
+
+<!-- WIKI-EXEMPT: pure prose rewrite of the user-facing landing description (H1 + intro hook). No behavior, automation, function, or gated code changed; the wiki-governed concepts (silent-staleness, function-replacement-convention, wiki-to-code-traceability) target code-and-automation surfaces, not skill marketing copy. Old paragraph replaced atomically in same Edit per function-replacement-convention principle. -->
+
 
 ## Invocation
 
