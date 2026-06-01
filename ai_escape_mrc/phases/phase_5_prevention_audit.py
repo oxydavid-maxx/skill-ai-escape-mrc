@@ -4,11 +4,12 @@ Only audits Q3 (MRC-NC) and Q4 (MRC-ND) preventions ??there are no
 prevention actions for Q1/Q2 (those are corrective-only quadrants).
 """
 import json
-from ai_escape_mrc.errors import VisibilityContractError
+from ai_escape_mrc.errors import VisibilityContractError, OutputIdentityContractError
 from ai_escape_mrc.sdk_client import ClaudeSession
 from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc import schemas
+from ai_escape_mrc.validators import validate_action_payload, FORBIDDEN_LEGACY_IDENTITY_TERMS
 
 # One internal critique per visit; the outer graph loop (phase_5 -> phase_4 on
 # REWORK) is now the real iteration.
@@ -51,14 +52,35 @@ def phase_5_prevention_audit(state: dict) -> dict:
                 f"{json.dumps(preventions, ensure_ascii=False)[:20000]}\n\n"
                 "Use WebSearch if you want to benchmark against state-of-the-art."
             )
-            try:
-                audit = sess.ask(user_msg, purpose=f"phase_5_prevention_audit_round_{round_num}")
-            except VisibilityContractError:
-                raise
-            except Exception as e:
-                import sys
-                sys.stderr.write(f"[WARN] phase_5 round {round_num} failed: {str(e)[:150]}; skipping round\n")
-                audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
+            audit = None
+            for attempt in (1, 2):
+                try:
+                    audit = sess.ask(user_msg, purpose=f"phase_5_prevention_audit_round_{round_num}_attempt_{attempt}")
+                except VisibilityContractError:
+                    raise
+                except Exception as e:
+                    import sys
+                    sys.stderr.write(f"[WARN] phase_5 round {round_num} attempt {attempt} failed: {str(e)[:150]}; skipping round\n")
+                    audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
+                    break  # transport error → take the fallback, do not retry for identity reasons
+
+                try:
+                    validate_action_payload(audit, artifact_name=f"phase_5 audit round {round_num} attempt {attempt}")
+                    break  # clean → accept this audit
+                except OutputIdentityContractError as e:
+                    if attempt == 2:
+                        raise  # second attempt still contaminated → fail closed
+                    offending = next(
+                        (t for t in FORBIDDEN_LEGACY_IDENTITY_TERMS if t in str(audit)),
+                        "unspecified legacy term",
+                    )
+                    user_msg = (
+                        f"{user_msg}\n\n"
+                        f"REGENERATE: your previous audit response contained forbidden legacy "
+                        f"identity literal {offending!r} in a `suggested_fix` or `issue` field. "
+                        f"Per the IDENTITY RENAME RULE in the system prompt, rewrite using the "
+                        f"active identity (`eightd-X` → `aem-X`, etc.). Emit the corrected JSON only."
+                    )
             if isinstance(audit, list):
                 if len(audit) == 1 and isinstance(audit[0], dict):
                     audit = audit[0]
