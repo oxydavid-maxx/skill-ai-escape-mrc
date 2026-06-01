@@ -68,6 +68,24 @@ def validate_no_legacy_identity_terms(text: str, *, artifact_name: str) -> None:
             )
 
 
+def validate_action_payload(payload, *, artifact_name: str) -> None:
+    """Validate any phase output payload (dict/list/str) for legacy identity terms.
+
+    JSON-serializes dict/list inputs so nested keys, list entries, embedded
+    command strings, and rationales are all surfaced to the underlying
+    `validate_no_legacy_identity_terms` denylist check. Strings pass through.
+    Used by phase_4 / phase_5 LLM-call wrappers as a producer-side gate;
+    raising here forces a one-shot retry with a named critique, and a second
+    failure propagates as `OutputIdentityContractError` (fail-closed).
+    """
+    import json
+    if isinstance(payload, (dict, list)):
+        text = json.dumps(payload, ensure_ascii=False)
+    else:
+        text = str(payload)
+    validate_no_legacy_identity_terms(text, artifact_name=artifact_name)
+
+
 def validate_phase9_plan(
     plan_path: Path,
     *,
