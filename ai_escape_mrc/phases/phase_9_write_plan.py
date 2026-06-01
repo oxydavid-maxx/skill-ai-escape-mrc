@@ -62,8 +62,17 @@ Constraints:
 - Concrete: exact file paths, exact commands, exact code (no TBD/TODO).
 - DRY/YAGNI: no speculative tasks beyond what the actions specify.
 - {identity_instruction}
+- IDENTITY RENAME RULE: If input actions (action.title, action.steps, action.files_touched, or any embedded code/path/command) reference any legacy identity literal from the denylist, REWRITE in the emitted plan using the active identity:
+  - `eightd-<name>` (binary/CLI) → `aem-<name>`
+  - `skill-8d-mrc` → `skill-ai-escape-mrc`
+  - `run_8d` → `run_ai_escape_mrc`
+  - `trigger_8d` → `trigger_ai_escape_mrc`
+  - `8d-reports` → `ai-escape-mrc-reports`
+  - `pending-8d` → `pending-ai-escape-mrc`
+  - `CLAUDE_EIGHTD` → `CLAUDE_AI_ESCAPE_MRC`
+  Apply this rename consistently across all task steps; do not preserve legacy literals even when quoting input action text.
 - Do NOT invoke any tools or skills. Just emit the plan markdown directly.
-""".format(identity_instruction=legacy_identity_instruction())
+""".format(identity_instruction=legacy_identity_instruction(include_legacy_terms=True))
 
 
 def phase_9_write_plan(state: dict) -> dict:

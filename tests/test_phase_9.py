@@ -107,8 +107,19 @@ def test_no_plan_template_import_in_phase9():
     assert "from ai_escape_mrc.phases._plan_template" not in code_only
 
 
-def test_phase9_generation_prompt_does_not_embed_forbidden_identity_terms():
+def test_phase9_generation_prompt_includes_denylist_and_rename_rule():
+    """Updated contract (post run-1780273836 fix): SYSTEM_PROMPT MUST embed the
+    forbidden-literal denylist so the LLM can recognize legacy identity terms
+    leaking from upstream actions.json and rename them. The plan.md OUTPUT
+    contract (no forbidden literals) is enforced by validate_phase9_plan, not
+    by hiding the denylist from the prompt."""
     from ai_escape_mrc.phases.phase_9_write_plan import SYSTEM_PROMPT
 
+    # Denylist must be visible to the LLM.
     for term in FORBIDDEN_LEGACY_IDENTITY_TERMS:
-        assert term not in SYSTEM_PROMPT
+        assert term in SYSTEM_PROMPT, f"denylist term {term!r} missing from SYSTEM_PROMPT"
+
+    # Rename rule must be present so the LLM knows how to rewrite.
+    assert "IDENTITY RENAME RULE" in SYSTEM_PROMPT
+    assert "skill-ai-escape-mrc" in SYSTEM_PROMPT
+    assert "aem-" in SYSTEM_PROMPT
