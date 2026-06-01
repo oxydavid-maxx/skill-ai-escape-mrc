@@ -67,7 +67,7 @@ def phase_5_prevention_audit(state: dict) -> dict:
                 try:
                     validate_action_payload(audit, artifact_name=f"phase_5 audit round {round_num} attempt {attempt}")
                     break  # clean → accept this audit
-                except OutputIdentityContractError as e:
+                except OutputIdentityContractError:
                     if attempt == 2:
                         raise  # second attempt still contaminated → fail closed
                     offending = next(
