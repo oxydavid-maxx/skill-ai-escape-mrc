@@ -1,5 +1,7 @@
 """Phase 4 ??2 corrective (Q1,Q2) + 2 prevention (Q3,Q4) = 4 parallel calls."""
 from unittest.mock import patch
+import pytest
+from ai_escape_mrc.errors import OutputIdentityContractError
 from ai_escape_mrc.phases.phase_4_actions import (
     phase_4_actions, _normalize_action_dict,
     CORRECTIVE_QUADRANTS, PREVENTION_QUADRANTS,
@@ -120,3 +122,52 @@ def test_phase_5_audit_skips_non_dict_prevention_action():
 
     # Should not crash even with list-shaped prevention_actions.
     assert result["phase_5_complete"] is True
+
+
+def test_phase_4_corrective_retries_once_on_legacy_term_and_passes():
+    """First LLM response contains 'eightd-resolve'; retry returns clean -> passes."""
+    responses = iter([
+        {"action": "create eightd-resolve binary", "rationale": "first try"},
+        {"action": "create aem-resolve binary", "rationale": "retry clean"},
+    ])
+    call_count = {"n": 0}
+
+    def fake(**kw):
+        call_count["n"] += 1
+        if "prevention" in kw["system"].lower():
+            return {"action": "prevent", "gate_test": {"scope": "PASS"}}
+        return next(responses)
+
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
+        result = phase_4_actions(_base_state())
+
+    assert call_count["n"] >= 5
+    assert "eightd" not in str(result["corrective_actions"])
+
+
+def test_phase_4_corrective_raises_after_second_legacy_hit():
+    """Both attempts return forbidden literals -> raises OutputIdentityContractError."""
+    def fake(**kw):
+        if "corrective" in kw["system"].lower():
+            return {"action": "create eightd-omission-resolve", "rationale": "still bad"}
+        return {"action": "prevent", "gate_test": {"scope": "PASS"}}
+
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
+        with pytest.raises(OutputIdentityContractError) as exc:
+            phase_4_actions(_base_state())
+    assert "eightd" in str(exc.value).lower() or "legacy" in str(exc.value).lower()
+
+
+def test_phase_4_no_retry_when_first_response_is_clean():
+    """Clean first response -> exactly 4 calls (no retry)."""
+    call_count = {"n": 0}
+
+    def fake(**kw):
+        call_count["n"] += 1
+        if "corrective" in kw["system"].lower():
+            return {"action": "use aem-resolve", "rationale": "clean"}
+        return {"action": "use ai-escape-mrc-reports dir", "gate_test": {"scope": "PASS"}}
+
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
+        phase_4_actions(_base_state())
+    assert call_count["n"] == 4
