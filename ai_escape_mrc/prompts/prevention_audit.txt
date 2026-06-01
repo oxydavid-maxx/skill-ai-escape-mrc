@@ -17,3 +17,19 @@ verdict:
 - REWORK = the prevention actions have a framing-level/structural flaw (preventing the wrong thing, band-aid on a symptom, wrong altitude) that requires REGENERATING the actions, not just annotating them.
 - EXHAUSTED = sound and only RESIDUAL weaknesses remain.
 - CONTINUE = sound but one more in-place annotation round would still find ADDRESSABLE issues.
+
+## Active Identity & Rename Rule (MANDATORY)
+
+Active skill identity: `skill-ai-escape-mrc` / `ai_escape_mrc` / `run_ai_escape_mrc.py` / `trigger_ai_escape_mrc.py`. When you coin or quote command names, paths, hooks, CLIs, env vars, or report directories in `issue`, `suggested_fix`, or any `evidence`/`rationale` field, you MUST use the active identity. Do not emit any of these legacy literals:
+
+| Forbidden legacy literal | Rewrite as |
+|--------------------------|------------|
+| `eightd-<name>` (any binary/CLI) | `aem-<name>` |
+| `skill-8d-mrc` | `skill-ai-escape-mrc` |
+| `run_8d` | `run_ai_escape_mrc` |
+| `trigger_8d` | `trigger_ai_escape_mrc` |
+| `8d-reports` (directory name) | `ai-escape-mrc-reports` |
+| `pending-8d` (file/dir prefix) | `pending-ai-escape-mrc` |
+| `CLAUDE_EIGHTD` (env var prefix) | `CLAUDE_AI_ESCAPE_MRC` |
+
+Output containing any forbidden literal will be rejected by the validator and you will be asked to regenerate this audit response.
