@@ -39,6 +39,9 @@ class AiEscapeMrcState(TypedDict, total=False):
     # Phase 1: IS/IS NOT
     phase_1_complete: bool
     is_isnt_table: dict
+    # Incident-class router (default True = full MRC analysis; fail-safe).
+    mrc_applicable: bool
+    mrc_applicability_justification: str
 
     # Phase 2: Why analysis
     phase_2_complete: bool
@@ -111,3 +114,27 @@ class AiEscapeMrcState(TypedDict, total=False):
 
 
 QUADRANTS = ["q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd"]
+TRC_QUADRANTS = ["q1_trc_nc", "q2_trc_nd"]
+MRC_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
+
+
+def active_quadrants(state: dict) -> list:
+    """Quadrants to analyze for this run.
+
+    Default = all four. The MRC quadrants are dropped ONLY when the incident-
+    class router POSITIVELY set ``mrc_applicable`` to the literal ``False``.
+
+    SAFETY INVARIANT (fail-safe — never silently under-analyze): any missing
+    value, ``None``, or truthy value keeps all four quadrants. Only a strict
+    ``is False`` narrows the universe. This guarantees zero behavior change for
+    systemic incidents and any case where the router could not conclude.
+    """
+    if state.get("mrc_applicable") is False:
+        return list(TRC_QUADRANTS)
+    return list(QUADRANTS)
+
+
+def active_prevention_quadrants(state: dict) -> list:
+    """Prevention quadrants (MRC only). Empty when MRC is not applicable."""
+    active = active_quadrants(state)
+    return [q for q in MRC_QUADRANTS if q in active]
