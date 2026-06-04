@@ -46,3 +46,42 @@ def test_phase_2_accepts_short_chain_without_retry():
     # Exactly 4 calls (one per quadrant), NOT 4*3=12 via retry loop.
     assert call_count["n"] == 4
     assert result["phase_2_complete"] is True
+
+
+def test_phase_2_corrective_only_when_mrc_not_applicable():
+    """Router set mrc_applicable=False -> only the two TRC quadrants run; the MRC
+    quadrants are never even called."""
+    state = {
+        "problem": "x",
+        "is_isnt_table": {},
+        "websearch_specific": [],
+        "wiki_pages": [],
+        "mrc_applicable": False,
+    }
+    call_count = {"n": 0}
+
+    def fake(**kw):
+        call_count["n"] += 1
+        return _make_chain(10)
+
+    with patch("ai_escape_mrc.phases.phase_2_why_analysis.call_claude", side_effect=fake):
+        result = phase_2_why_analysis(state)
+
+    assert call_count["n"] == 2  # only q1_trc_nc, q2_trc_nd
+    assert set(result["why_chains"].keys()) == {"q1_trc_nc", "q2_trc_nd"}
+
+
+def test_phase_2_systemic_keeps_all_four():
+    """Safety regression: mrc_applicable=True -> all four quadrants, no change."""
+    state = {
+        "problem": "x",
+        "is_isnt_table": {},
+        "websearch_specific": [],
+        "wiki_pages": [],
+        "mrc_applicable": True,
+    }
+    with patch("ai_escape_mrc.phases.phase_2_why_analysis.call_claude", return_value=_make_chain(10)):
+        result = phase_2_why_analysis(state)
+    assert set(result["why_chains"].keys()) == {
+        "q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd",
+    }
