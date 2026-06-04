@@ -9,13 +9,13 @@ Per SKILL.md:
 Prior version generated prevention for ALL 4 quadrants (8 calls) ??wrong.
 """
 import json
-from ai_escape_mrc.errors import VisibilityContractError, OutputIdentityContractError
+from ai_escape_mrc.errors import VisibilityContractError
 from ai_escape_mrc.sdk_client import call_claude
 from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.parallel import parallel_run
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc.validators import (
-    validate_action_payload,
+    sanitize_legacy_identity,
     FORBIDDEN_LEGACY_IDENTITY_TERMS,
 )
 from ai_escape_mrc import schemas
@@ -37,11 +37,14 @@ def _normalize_action_dict(v):
 
 def _call_with_legacy_term_retry(call_fn, *, system, user, json_schema, purpose):
     """Run an LLM call; on legacy-identity-term detection, retry once with a
-    named critique injected; if the retry still trips the gate, re-raise.
+    named critique injected; if the retry is still dirty, SANITIZE and return.
 
-    No fallback stub on identity failures - that would defeat the producer
-    gate. Transport errors (SDK crashes / timeouts) are handled by the
-    caller's existing try/except, not here.
+    Never raises on identity: a cosmetic naming token can no longer destroy a
+    finished run. The first dirty response gets one self-correction retry
+    (cleaner than a mechanical rename); the second-attempt fallback applies the
+    deterministic token-boundary sanitizer via a JSON round-trip and returns.
+    Transport errors (SDK crashes / timeouts) are handled by the caller's
+    existing try/except, not here.
     """
     for attempt in (1, 2):
         result = call_fn(
@@ -51,24 +54,25 @@ def _call_with_legacy_term_retry(call_fn, *, system, user, json_schema, purpose)
             json_schema=json_schema,
             purpose=purpose if attempt == 1 else f"{purpose}_retry_legacy",
         )
-        try:
-            validate_action_payload(result, artifact_name=f"phase_4 {purpose} (attempt {attempt})")
-            return result
-        except OutputIdentityContractError:
-            if attempt == 2:
-                raise
-            offending = next(
-                (t for t in FORBIDDEN_LEGACY_IDENTITY_TERMS if t in str(result)),
-                "unspecified legacy term",
-            )
-            user = (
-                f"{user}\n\n"
-                f"REGENERATE: your previous response contained forbidden legacy "
-                f"identity literal {offending!r}. Per the IDENTITY RENAME RULE in "
-                f"the system prompt, rewrite using the active identity (e.g. "
-                f"`eightd-X` -> `aem-X`). Emit the corrected JSON only."
-            )
-    # Unreachable (loop always returns or raises) - present only to satisfy linters
+        serialized = json.dumps(result, ensure_ascii=False)
+        if sanitize_legacy_identity(serialized) == serialized:
+            return result  # clean — no legacy token present
+        if attempt == 2:
+            # Second attempt still dirty: sanitize deterministically and return.
+            # Never raise — sanitize-then-proceed preserves the finished work.
+            return json.loads(sanitize_legacy_identity(serialized))
+        offending = next(
+            (t for t in FORBIDDEN_LEGACY_IDENTITY_TERMS if t in str(result)),
+            "unspecified legacy term",
+        )
+        user = (
+            f"{user}\n\n"
+            f"REGENERATE: your previous response contained forbidden legacy "
+            f"identity literal {offending!r}. Per the IDENTITY RENAME RULE in "
+            f"the system prompt, rewrite using the active identity (e.g. "
+            f"`eightd-X` -> `aem-X`). Emit the corrected JSON only."
+        )
+    # Unreachable (loop always returns) - present only to satisfy linters
     raise RuntimeError("unreachable")  # pragma: no cover
 
 
@@ -128,10 +132,6 @@ def phase_4_actions(state: dict) -> dict:
             return q, r
         except VisibilityContractError:
             raise
-        except OutputIdentityContractError:
-            # Identity contamination is a content error, NOT a transport error.
-            # Fail closed - no stub fallback, no degraded emission (R13 compliance).
-            raise
         except Exception as e:
             import sys
             sys.stderr.write(f"[WARN] corrective {q} failed: {str(e)[:150]}; using stub\n")
@@ -149,8 +149,6 @@ def phase_4_actions(state: dict) -> dict:
             )
             return q, r
         except VisibilityContractError:
-            raise
-        except OutputIdentityContractError:
             raise
         except Exception as e:
             import sys

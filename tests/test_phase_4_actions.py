@@ -1,7 +1,5 @@
 """Phase 4 ??2 corrective (Q1,Q2) + 2 prevention (Q3,Q4) = 4 parallel calls."""
 from unittest.mock import patch
-import pytest
-from ai_escape_mrc.errors import OutputIdentityContractError
 from ai_escape_mrc.phases.phase_4_actions import (
     phase_4_actions, _normalize_action_dict,
     CORRECTIVE_QUADRANTS, PREVENTION_QUADRANTS,
@@ -145,17 +143,23 @@ def test_phase_4_corrective_retries_once_on_legacy_term_and_passes():
     assert "eightd" not in str(result["corrective_actions"])
 
 
-def test_phase_4_corrective_raises_after_second_legacy_hit():
-    """Both attempts return forbidden literals -> raises OutputIdentityContractError."""
+def test_phase_4_corrective_sanitizes_after_second_legacy_hit():
+    """Both attempts return forbidden literals -> sanitize-then-proceed (no raise).
+
+    The 2nd-attempt fallback applies the deterministic token-boundary sanitizer
+    and returns clean content; a cosmetic naming token never kills the run.
+    """
     def fake(**kw):
         if "corrective" in kw["system"].lower():
             return {"action": "create eightd-omission-resolve", "rationale": "still bad"}
         return {"action": "prevent", "gate_test": {"scope": "PASS"}}
 
     with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
-        with pytest.raises(OutputIdentityContractError) as exc:
-            phase_4_actions(_base_state())
-    assert "eightd" in str(exc.value).lower() or "legacy" in str(exc.value).lower()
+        result = phase_4_actions(_base_state())
+
+    # No raise; final state is sanitized (eightd- -> aem-).
+    assert "eightd" not in str(result["corrective_actions"]).lower()
+    assert "aem-omission-resolve" in str(result["corrective_actions"])
 
 
 def test_phase_4_no_retry_when_first_response_is_clean():
