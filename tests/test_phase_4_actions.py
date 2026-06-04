@@ -14,6 +14,29 @@ def _base_state():
     }
 
 
+def test_phase_4_corrective_only_when_mrc_not_applicable():
+    """Router set mrc_applicable=False -> only Q1/Q2 corrective run; no prevention
+    LLM call is made and prevention_actions stays empty."""
+    state = _base_state()
+    state["mrc_applicable"] = False
+    call_count = {"corrective": 0, "prevention": 0}
+
+    def fake(**kw):
+        if "prevention" in kw["system"].lower():
+            call_count["prevention"] += 1
+            return {"action": "prevent", "gate_test": {"scope": "PASS"}}
+        call_count["corrective"] += 1
+        return {"action": "fix", "rationale": "..."}
+
+    with patch("ai_escape_mrc.phases.phase_4_actions.call_claude", side_effect=fake):
+        result = phase_4_actions(state)
+
+    assert set(result["corrective_actions"].keys()) == {"q1_trc_nc", "q2_trc_nd"}
+    assert result["prevention_actions"] == {}
+    assert call_count["prevention"] == 0
+    assert call_count["corrective"] == 2
+
+
 def test_phase_4_corrective_only_for_q1_q2():
     def fake(**kw):
         if "corrective" in kw["system"].lower():

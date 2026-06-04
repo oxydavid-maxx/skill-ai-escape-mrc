@@ -13,6 +13,7 @@ from ai_escape_mrc.errors import VisibilityContractError
 from ai_escape_mrc.sdk_client import call_claude
 from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.parallel import parallel_run
+from ai_escape_mrc.state import active_prevention_quadrants
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc.validators import (
     sanitize_legacy_identity,
@@ -80,6 +81,11 @@ def phase_4_actions(state: dict) -> dict:
     corrective_prompt = load_prompt("corrective_action")
     prevention_prompt = load_prompt("prevention_action")
 
+    # Active prevention quadrants: MRC (Q3/Q4) by default, but EMPTY when the
+    # incident-class router set mrc_applicable=False -> corrective-only run, no
+    # management-system prevention to confabulate.
+    prevention_quadrants = active_prevention_quadrants(state)
+
     # Capture prior prevention actions + latest audit BEFORE we reset state, so a
     # phase_5 loop-back (REWORK) can REVISE rather than regenerate blind.
     prior_prevention = dict(state.get("prevention_actions") or {})
@@ -88,7 +94,7 @@ def phase_4_actions(state: dict) -> dict:
     higher_q = refl.get("higher_level_question") if isinstance(refl, dict) else None
 
     def _revision_for(q):
-        if q not in PREVENTION_QUADRANTS or not p5_rounds:
+        if q not in prevention_quadrants or not p5_rounds:
             return None
         prior = prior_prevention.get(q)
         if not isinstance(prior, dict):
@@ -160,13 +166,14 @@ def phase_4_actions(state: dict) -> dict:
     if p5_rounds and prior_prevention:
         # Targeted rework from phase_5: corrective (Q1/Q2) is not audited by
         # phase_5, so keep it unchanged; only regenerate the critiqued prevention
-        # quadrants (or all prevention if the REWORK was a pure framing verdict).
+        # quadrants (or all active prevention if the REWORK was a pure framing
+        # verdict). Intersected with the active set (empty when MRC N/A).
         latest = p5_rounds[-1] if isinstance(p5_rounds[-1], dict) else {}
         critiqued = {
             w.get("quadrant") for w in (latest.get("weaknesses") or [])
-            if isinstance(w, dict) and w.get("quadrant") in PREVENTION_QUADRANTS
-        } or set(PREVENTION_QUADRANTS)
-        prev_to_run = [q for q in PREVENTION_QUADRANTS if q in critiqued]
+            if isinstance(w, dict) and w.get("quadrant") in prevention_quadrants
+        } or set(prevention_quadrants)
+        prev_to_run = [q for q in prevention_quadrants if q in critiqued]
         tasks = [lambda q=q: _prevention(q) for q in prev_to_run]
         # Preserve prior corrective + uncritiqued prevention.
         state["corrective_actions"] = dict(state.get("corrective_actions") or {})
@@ -174,7 +181,7 @@ def phase_4_actions(state: dict) -> dict:
     else:
         tasks = (
             [lambda q=q: _corrective(q) for q in CORRECTIVE_QUADRANTS]
-            + [lambda q=q: _prevention(q) for q in PREVENTION_QUADRANTS]
+            + [lambda q=q: _prevention(q) for q in prevention_quadrants]
         )
         state["corrective_actions"] = {}
         state["prevention_actions"] = {}
