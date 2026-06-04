@@ -82,6 +82,51 @@ def test_phase_5_audit_sanitizes_after_second_legacy_hit():
     assert any("aem-resolve" in n for n in notes)
 
 
+def test_phase_5_over_scoped_cuts_not_appends():
+    """An OVER_SCOPED weakness REPLACES the control with the proportionate
+    suggested_fix and records the original under downscoped_from — it does NOT
+    merely append an audit note."""
+    state = {
+        "prevention_actions": {
+            "q3_mrc_nc": {"action": "charter a quarterly Policy Review (每三個月檢查一次)",
+                          "hierarchy_level": 5},
+            "q4_mrc_nd": {"action": "use ai-escape-mrc-reports"},
+        },
+        "phase_5_rounds": [],
+    }
+    responses = [
+        {"round": 1, "verdict": "OVER_SCOPED", "weaknesses": [
+            {"quadrant": "q3_mrc_nc", "classification": "OVER_SCOPED",
+             "issue": "standing ritual for a one-off; Rung-5 administrative",
+             "suggested_fix": "add a one-line CI assertion at config load"},
+        ]},
+    ]
+    cm, sess = _mock_session(responses)
+    with patch("ai_escape_mrc.phases.phase_5_prevention_audit.ClaudeSession", return_value=cm):
+        result = phase_5_prevention_audit(state)
+
+    pa = result["prevention_actions"]["q3_mrc_nc"]
+    assert "downscoped_from" in pa
+    assert "quarterly" in pa["downscoped_from"]
+    assert pa["action"] == "add a one-line CI assertion at config load"
+    # The cut must NOT be smuggled in as a mere audit note appendage.
+    assert "每三個月" not in pa["action"]
+
+
+def test_phase_5_empty_prevention_actions_noop_exhausted():
+    """When MRC N/A (no prevention actions), phase_5 must no-op gracefully:
+    no session opened, verdict EXHAUSTED, status passed."""
+    state = {"prevention_actions": {}, "phase_5_rounds": []}
+    # ClaudeSession must NOT be constructed at all.
+    sentinel = MagicMock(side_effect=AssertionError("ClaudeSession must not be opened"))
+    with patch("ai_escape_mrc.phases.phase_5_prevention_audit.ClaudeSession", sentinel):
+        result = phase_5_prevention_audit(state)
+    assert result["phase_5_complete"] is True
+    assert result["phase_5_verdict"] == "EXHAUSTED"
+    assert result["phase_5_status"] == "passed"
+    assert result["phase_5_rounds"] == []
+
+
 def test_phase_5_audit_no_retry_when_first_response_is_clean():
     responses = [
         {"round": 1, "verdict": "EXHAUSTED", "weaknesses": [

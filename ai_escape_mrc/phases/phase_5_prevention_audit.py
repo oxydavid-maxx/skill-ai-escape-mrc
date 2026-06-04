@@ -18,9 +18,11 @@ PREVENTION_QUADRANTS = ["q3_mrc_nc", "q4_mrc_nd"]
 
 
 def _has_addressable(audit: dict) -> bool:
-    """True if the audit round surfaced at least one ADDRESSABLE weakness."""
+    """True if the audit round surfaced at least one weakness that triggers an
+    in-place change: ADDRESSABLE (append a note) or OVER_SCOPED (cut/replace the
+    control). Both keep the loop alive so the fix is actually applied."""
     for w in audit.get("weaknesses", []) or []:
-        if isinstance(w, dict) and w.get("classification") == "ADDRESSABLE":
+        if isinstance(w, dict) and w.get("classification") in ("ADDRESSABLE", "OVER_SCOPED"):
             return True
     return False
 
@@ -30,10 +32,24 @@ def phase_5_prevention_audit(state: dict) -> dict:
     state.setdefault("phase_5_rounds", [])
     residual = []
 
+    prevention_actions = state.get("prevention_actions") or {}
     preventions = {
-        q: state["prevention_actions"].get(q, {})
+        q: prevention_actions.get(q, {})
         for q in PREVENTION_QUADRANTS
+        if q in prevention_actions
     }
+
+    # Corrective-only run (router set mrc_applicable=False, or no prevention
+    # actions were produced): there is nothing to audit. No-op gracefully —
+    # do NOT open a Claude session. Verdict EXHAUSTED, status passed (a clean
+    # no-op is not a degraded/fallback audit).
+    if not preventions:
+        state["phase_5_residual_risks"] = []
+        state["phase_5_verdict"] = "EXHAUSTED"
+        state["phase_5_status"] = "passed"
+        state["phase_5_attempt_count"] = state.get("phase_5_attempt_count", 0) + 1
+        state["phase_5_complete"] = True
+        return state
 
     # One persistent session across rounds (same rationale as phase_3): pay the
     # subprocess startup once and minimize spawns on a flaky transport.
@@ -134,12 +150,37 @@ def phase_5_prevention_audit(state: dict) -> dict:
 
 
 def _apply_fixes(prevention_actions: dict, audit: dict) -> None:
+    """Apply the audit's in-place fixes to the prevention actions.
+
+    - ADDRESSABLE: append the suggested_fix as an audit note (additive).
+    - OVER_SCOPED: CUT — replace the over-engineered control with the auditor's
+      proportionate suggested_fix, recording the original under ``downscoped_from``
+      so the cut is auditable (no silent deletion). This is the one path that can
+      make the quality-control phase REMOVE bureaucracy, not only add to it.
+    """
     for w in audit.get("weaknesses", []) or []:
-        if not isinstance(w, dict) or w.get("classification") != "ADDRESSABLE":
+        if not isinstance(w, dict):
             continue
+        cls = w.get("classification")
         q = w.get("quadrant")
         if q not in prevention_actions:
             continue
         pa = prevention_actions[q]
-        if isinstance(pa, dict):
+        if not isinstance(pa, dict):
+            continue
+        if cls == "ADDRESSABLE":
             pa.setdefault("audit_notes", []).append(w.get("suggested_fix", ""))
+        elif cls == "OVER_SCOPED":
+            replacement = w.get("suggested_fix", "")
+            if not replacement:
+                # No proportionate alternative supplied: do not blind-delete the
+                # control; record the over-scope finding as a note instead.
+                pa.setdefault("audit_notes", []).append(
+                    "OVER_SCOPED: " + str(w.get("issue", ""))
+                )
+                continue
+            # Record the original control once (keep the FIRST original if a
+            # later round cuts again) then replace with the proportionate one.
+            pa.setdefault("downscoped_from", pa.get("action", ""))
+            pa["action"] = replacement
+            pa.setdefault("downscope_notes", []).append(w.get("issue", ""))
