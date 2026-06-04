@@ -8,7 +8,7 @@ from pathlib import Path
 from ai_escape_mrc.sdk_client import call_claude
 from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt, sluggify
-from ai_escape_mrc.validators import legacy_identity_instruction, validate_no_legacy_identity_terms
+from ai_escape_mrc.validators import legacy_identity_instruction, sanitize_legacy_identity
 URL_RE = re.compile(r"https?://[^\s)\"']+")
 
 
@@ -48,7 +48,10 @@ def phase_7_report(state: dict) -> dict:
     state["closure_audit"] = _run_closure_audit(state)
 
     rendered = _render_report(state)
-    validate_no_legacy_identity_terms(rendered, artifact_name="report.md")
+    # Sanitize-then-proceed: rewrite deprecated self-identity tokens to the
+    # active identity rather than raising (a cosmetic naming token must never
+    # destroy a finished run at this near-final phase).
+    rendered = sanitize_legacy_identity(rendered)
 
     run_dir = Path(state["run_dir"])
     run_dir.mkdir(parents=True, exist_ok=True)
