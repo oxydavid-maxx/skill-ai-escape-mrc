@@ -57,5 +57,43 @@ def phase_1_is_isnt(state: dict) -> dict:
             result[d] = {"is": "unknown", "is_not": "unknown", "distinction": "LLM output missing"}
 
     state["is_isnt_table"] = result
+
+    # Incident-class router: does this incident plausibly have a MANAGEMENT-
+    # SYSTEM (policy/ownership/process) root cause worth a prevention action, or
+    # is it a LOCAL, NON-RECURRING one-off? SAFETY INVARIANT: default True
+    # (analyze) and fall back to True on ANY classifier exception or non-boolean
+    # output — never silently under-analyze. False is set ONLY when the router
+    # returns a strict boolean False.
+    mrc_applicable = True
+    justification = "default: analyze (router not conclusive)"
+    try:
+        cls = call_claude(
+            model=model_for_role("is_isnt_extraction"),
+            system=(
+                "Classify whether this incident plausibly has a MANAGEMENT-SYSTEM "
+                "(policy/ownership/process) root cause worth a prevention action, or "
+                "is a LOCAL, NON-RECURRING one-off (single technical/behavioral slip, "
+                "no systemic gap). Return mrc_applicable=false ONLY if you can justify "
+                "it is local AND non-recurring AND has no plausible management gap. "
+                "If it recurs, spans surfaces, or matches a prior class -> true. "
+                "When unsure -> true."
+            ),
+            user=f"Problem:\n{state['problem']}\n\nIS/IS NOT:\n{result}",
+            json_schema=schemas.MRC_APPLICABILITY,
+            purpose="mrc_applicability",
+        )
+        if isinstance(cls, dict) and isinstance(cls.get("mrc_applicable"), bool):
+            mrc_applicable = cls["mrc_applicable"]
+            justification = str(cls.get("justification", ""))[:500] or justification
+    except VisibilityContractError:
+        raise
+    except Exception as e:
+        sys.stderr.write(
+            f"[WARN] phase_1 mrc-router failed: {type(e).__name__}: "
+            f"{str(e)[:150]}; default mrc_applicable=True\n"
+        )
+    state["mrc_applicable"] = mrc_applicable
+    state["mrc_applicability_justification"] = justification
+
     state["phase_1_complete"] = True
     return state
