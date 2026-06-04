@@ -4,12 +4,12 @@ Only audits Q3 (MRC-NC) and Q4 (MRC-ND) preventions ??there are no
 prevention actions for Q1/Q2 (those are corrective-only quadrants).
 """
 import json
-from ai_escape_mrc.errors import VisibilityContractError, OutputIdentityContractError
+from ai_escape_mrc.errors import VisibilityContractError
 from ai_escape_mrc.sdk_client import ClaudeSession
 from ai_escape_mrc.models import model_for_role
 from ai_escape_mrc.utils import load_prompt
 from ai_escape_mrc import schemas
-from ai_escape_mrc.validators import validate_action_payload, FORBIDDEN_LEGACY_IDENTITY_TERMS
+from ai_escape_mrc.validators import sanitize_legacy_identity, FORBIDDEN_LEGACY_IDENTITY_TERMS
 
 # One internal critique per visit; the outer graph loop (phase_5 -> phase_4 on
 # REWORK) is now the real iteration.
@@ -64,23 +64,26 @@ def phase_5_prevention_audit(state: dict) -> dict:
                     audit = {"round": round_num, "weaknesses": [], "verdict": "EXHAUSTED", "_fallback": True}
                     break  # transport error → take the fallback, do not retry for identity reasons
 
-                try:
-                    validate_action_payload(audit, artifact_name=f"phase_5 audit round {round_num} attempt {attempt}")
+                serialized = json.dumps(audit, ensure_ascii=False)
+                if sanitize_legacy_identity(serialized) == serialized:
                     break  # clean → accept this audit
-                except OutputIdentityContractError:
-                    if attempt == 2:
-                        raise  # second attempt still contaminated → fail closed
-                    offending = next(
-                        (t for t in FORBIDDEN_LEGACY_IDENTITY_TERMS if t in str(audit)),
-                        "unspecified legacy term",
-                    )
-                    user_msg = (
-                        f"{user_msg}\n\n"
-                        f"REGENERATE: your previous audit response contained forbidden legacy "
-                        f"identity literal {offending!r} in a `suggested_fix` or `issue` field. "
-                        f"Per the IDENTITY RENAME RULE in the system prompt, rewrite using the "
-                        f"active identity (`eightd-X` → `aem-X`, etc.). Emit the corrected JSON only."
-                    )
+                if attempt == 2:
+                    # Second attempt still dirty: sanitize deterministically and
+                    # accept. Never raise — a cosmetic naming token can no longer
+                    # destroy the audit (sanitize-then-proceed).
+                    audit = json.loads(sanitize_legacy_identity(serialized))
+                    break
+                offending = next(
+                    (t for t in FORBIDDEN_LEGACY_IDENTITY_TERMS if t in str(audit)),
+                    "unspecified legacy term",
+                )
+                user_msg = (
+                    f"{user_msg}\n\n"
+                    f"REGENERATE: your previous audit response contained forbidden legacy "
+                    f"identity literal {offending!r} in a `suggested_fix` or `issue` field. "
+                    f"Per the IDENTITY RENAME RULE in the system prompt, rewrite using the "
+                    f"active identity (`eightd-X` → `aem-X`, etc.). Emit the corrected JSON only."
+                )
             if isinstance(audit, list):
                 if len(audit) == 1 and isinstance(audit[0], dict):
                     audit = audit[0]

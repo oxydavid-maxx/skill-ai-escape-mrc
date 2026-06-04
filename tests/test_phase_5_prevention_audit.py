@@ -1,7 +1,5 @@
-"""Phase 5 prevention-audit legacy-identity producer gate."""
-import pytest
+"""Phase 5 prevention-audit legacy-identity sanitize gate."""
 from unittest.mock import patch, MagicMock
-from ai_escape_mrc.errors import OutputIdentityContractError
 from ai_escape_mrc.phases.phase_5_prevention_audit import phase_5_prevention_audit
 
 
@@ -55,7 +53,12 @@ def test_phase_5_audit_retries_once_on_legacy_term_and_passes():
     assert all("eightd" not in note for note in audit_notes)
 
 
-def test_phase_5_audit_raises_after_second_legacy_hit():
+def test_phase_5_audit_sanitizes_after_second_legacy_hit():
+    """Both attempts dirty -> sanitize-then-proceed (no raise).
+
+    The 2nd-attempt fallback applies the deterministic sanitizer to the audit
+    dict and accepts it; a cosmetic naming token never kills the run.
+    """
     responses = [
         {"round": 1, "verdict": "EXHAUSTED", "weaknesses": [
             {"quadrant": "q3_mrc_nc", "classification": "ADDRESSABLE",
@@ -66,10 +69,17 @@ def test_phase_5_audit_raises_after_second_legacy_hit():
              "issue": "x", "suggested_fix": "still uses eightd-resolve"},
         ]},
     ]
-    cm, _sess = _mock_session(responses)
+    cm, sess = _mock_session(responses)
     with patch("ai_escape_mrc.phases.phase_5_prevention_audit.ClaudeSession", return_value=cm):
-        with pytest.raises(OutputIdentityContractError):
-            phase_5_prevention_audit(_base_state_with_preventions())
+        result = phase_5_prevention_audit(_base_state_with_preventions())
+
+    # Retried exactly once (2 asks), then sanitized — no raise.
+    assert sess.ask.call_count == 2
+    assert "eightd" not in str(result["phase_5_rounds"]).lower()
+    # The applied audit fix was sanitized into the prevention action notes.
+    notes = result["prevention_actions"]["q3_mrc_nc"].get("audit_notes") or []
+    assert all("eightd" not in n for n in notes)
+    assert any("aem-resolve" in n for n in notes)
 
 
 def test_phase_5_audit_no_retry_when_first_response_is_clean():
