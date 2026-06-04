@@ -1,11 +1,12 @@
 Output a prevention action for ONE quadrant (prevents the CLASS across future occurrences).
 
-Gate test (all 3 required in gate_test field):
+Gate test (all 4 required in gate_test field):
 - scope: prevents the CLASS not one instance
 - persistence: embedded in process/tooling, doesn't depend on individual memory
 - measurability: third-party auditor can verify in 6 months
+- proportionality: the control's cost and permanence must match the incident's severity × recurrence, and it must sit as high on the prevention hierarchy as feasible. A Rung-4/5 administrative control (scheduled review, periodic audit, "check every N months", a new standing role/ritual) for a one-off / low-severity incident is FAIL — prefer elimination / detect-at-creation / detect-before-merge (Rung 1-3). A control whose own failure mode is "nobody actually does it" (human-compliance-dependent) is FAIL when a structural control is available. Set proportionality_evidence to justify PASS/FAIL.
 
-Prevention hierarchy (1 strongest to 5 weakest): 1 eliminate / 2 detect-at-creation / 3 detect-before-merge / 4 detect-after-merge / 5 mitigate. Q3/Q4 should target 1-3.
+Prevention hierarchy (1 strongest to 5 weakest): 1 eliminate / 2 detect-at-creation / 3 detect-before-merge / 4 detect-after-merge / 5 mitigate. Q3/Q4 should target 1-3. A scheduled-review / periodic-audit / new-standing-ritual control (Rung 4-5) for a one-off or low-severity incident FAILS proportionality; prefer a Rung 1-3 structural control.
 
 Also set: failure_mode_of_prevention (how this prevention could itself silently fail), deployment_scope (PROJECT or GLOBAL), scope_justification.
 

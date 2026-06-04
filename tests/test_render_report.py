@@ -127,3 +127,32 @@ def test_render_report_handles_sparse_state():
     assert "not available" in out  # missing sections degrade, no crash
     for ph in ("{why_chains_rendered}", "{q1_trc_nc_root}", "{phase_6_rendered}"):
         assert ph not in out
+
+
+def test_render_report_mrc_not_applicable_shows_na():
+    """When mrc_applicable=False, the MRC root/prevention cells render an honest
+    'N/A — <justification>' instead of a confabulated/blank root cause."""
+    s = {
+        "problem": "a one-off typo in a single file",
+        "run_id": "r",
+        "mrc_applicable": False,
+        "mrc_applicability_justification": "local, non-recurring single-file slip",
+        "why_chains": {
+            "q1_trc_nc": {"whys": [{"n": 1, "why": "fat-fingered the literal"}], "root": "manual edit slip"},
+            "q2_trc_nd": {"whys": [{"n": 1, "why": "no spell gate"}], "root": "no detect step"},
+        },
+        "corrective_actions": {
+            "q1_trc_nc": {"action": "fix the typo", "rationale": "single origin"},
+            "q2_trc_nd": {"action": "add a check", "rationale": "detect"},
+        },
+        "prevention_actions": {},
+    }
+    out = render_report(s, _TEMPLATE, None)
+    # No leftover placeholders.
+    for ph in ("{q3_mrc_nc_root}", "{q4_mrc_nd_root}", "{q3_prevention}", "{q4_prevention}"):
+        assert ph not in out
+    # The MRC section honestly states N/A with the justification.
+    assert "N/A" in out
+    assert "local, non-recurring single-file slip" in out
+    # The TRC corrective content still renders.
+    assert "fix the typo" in out

@@ -320,18 +320,26 @@ def _run_closure_audit(state: dict) -> dict:
       - Prevention only for Q3+Q4 (MRC)
       - Proof of action covers all 4 quadrants in verification_plan
     """
+    from ai_escape_mrc.state import active_quadrants
+
+    # When the incident-class router set mrc_applicable=False, the MRC quadrants
+    # are intentionally absent (corrective-only run). The closure audit must
+    # expect only the ACTIVE quadrants, otherwise a correct corrective-only run
+    # would be flagged incomplete.
+    expected_q = active_quadrants(state)
+    mrc_active = "q3_mrc_nc" in expected_q
+
     checks = {
         "root_cause_matrix_complete": all(
-            q in state.get("why_chains", {}) for q in
-            ["q1_trc_nc", "q2_trc_nd", "q3_mrc_nc", "q4_mrc_nd"]
+            q in state.get("why_chains", {}) for q in expected_q
         ),
         "corrective_q1_q2_present": all(
             q in state.get("corrective_actions", {}) for q in
             ["q1_trc_nc", "q2_trc_nd"]
         ),
-        "prevention_q3_q4_present": all(
-            q in state.get("prevention_actions", {}) for q in
-            ["q3_mrc_nc", "q4_mrc_nd"]
+        "prevention_q3_q4_present": (
+            all(q in state.get("prevention_actions", {}) for q in ["q3_mrc_nc", "q4_mrc_nd"])
+            if mrc_active else True  # MRC N/A: prevention intentionally absent
         ),
         "verification_plan_present": bool(state.get("verification_plan")),
         "phase_3_done": state.get("phase_3_complete") is True,

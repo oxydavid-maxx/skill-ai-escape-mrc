@@ -102,11 +102,14 @@ def _render_is_isnt(tbl: Any) -> str:
     return "\n".join(rows)
 
 
-def _render_why_chains(chains: Any) -> str:
+def _render_why_chains(chains: Any, mrc_na_cell: str = None) -> str:
     if not isinstance(chains, dict):
         return "_(not available)_"
     out = []
     for q in _QUADRANTS:
+        if mrc_na_cell and q in _PREVENTION_Q:
+            out.append(f"### {q}\n\n_{mrc_na_cell}_\n")
+            continue
         chain = chains.get(q)
         if not isinstance(chain, dict):
             continue
@@ -153,10 +156,14 @@ def _render_audit_rounds(rounds: Any) -> str:
     return "\n".join(out)
 
 
-def _render_phase_4(corrective: dict, prevention: dict) -> str:
+def _render_phase_4(corrective: dict, prevention: dict, mrc_na_cell: str = None) -> str:
     out = []
     for q in _QUADRANTS:
         out.append(f"### {q}")
+        if mrc_na_cell and q in _PREVENTION_Q:
+            out.append(f"- **Prevention:** {mrc_na_cell}")
+            out.append("")
+            continue
         if q in _CORRECTIVE_Q:
             a = (corrective or {}).get(q)
             if isinstance(a, dict):
@@ -264,7 +271,18 @@ def render_report(state: dict, template: str, closure: Any = None) -> str:
     prevention = state.get("prevention_actions") or {}
     vmap = _verif_map(state.get("verification_plan"))
 
+    # Incident-class router: when MRC is not applicable (a local, non-recurring
+    # one-off), the MRC quadrants were never analyzed. Render an honest N/A with
+    # the router's justification instead of a blank/confabulated root cause.
+    mrc_na = state.get("mrc_applicable") is False
+    mrc_na_cell = (
+        f"N/A — {state.get('mrc_applicability_justification', 'local one-off; no management-system gap')}"
+        if mrc_na else None
+    )
+
     def root(q):
+        if mrc_na and q in _PREVENTION_Q:
+            return _cell(mrc_na_cell)
         c = chains.get(q)
         return _cell(c.get("root")) if isinstance(c, dict) else "—"
 
@@ -291,17 +309,17 @@ def render_report(state: dict, template: str, closure: Any = None) -> str:
         "{q4_corrective}": "— (MRC: prevention-only)",
         "{q1_prevention}": "— (TRC: corrective-only)",
         "{q2_prevention}": "— (TRC: corrective-only)",
-        "{q3_prevention}": _cell(_action_text(prevention, "q3_mrc_nc")),
-        "{q4_prevention}": _cell(_action_text(prevention, "q4_mrc_nd")),
+        "{q3_prevention}": _cell(mrc_na_cell) if mrc_na else _cell(_action_text(prevention, "q3_mrc_nc")),
+        "{q4_prevention}": _cell(mrc_na_cell) if mrc_na else _cell(_action_text(prevention, "q4_mrc_nd")),
         "{q1_metric}": metric("q1_trc_nc"), "{q1_target}": target("q1_trc_nc"),
         "{q2_metric}": metric("q2_trc_nd"), "{q2_target}": target("q2_trc_nd"),
         "{q3_metric}": metric("q3_mrc_nc"), "{q3_target}": target("q3_mrc_nc"),
         "{q4_metric}": metric("q4_mrc_nd"), "{q4_target}": target("q4_mrc_nd"),
         "{is_isnt_table_rendered}": _render_is_isnt(state.get("is_isnt_table")),
-        "{why_chains_rendered}": _render_why_chains(chains),
+        "{why_chains_rendered}": _render_why_chains(chains, mrc_na_cell if mrc_na else None),
         "{phase_3_rounds_rendered}": _loop_note(state, "phase_3_attempt_count", "why-chains")
         + _render_audit_rounds(state.get("phase_3_rounds")),
-        "{phase_4_rendered}": _render_phase_4(corrective, prevention),
+        "{phase_4_rendered}": _render_phase_4(corrective, prevention, mrc_na_cell if mrc_na else None),
         "{phase_5_rounds_rendered}": _loop_note(state, "phase_5_attempt_count", "prevention actions")
         + _render_audit_rounds(state.get("phase_5_rounds")),
         "{phase_6_rendered}": _render_phase_6(state.get("verification_plan")),
