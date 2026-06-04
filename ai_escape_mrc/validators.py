@@ -14,6 +14,8 @@ a typed exception and must route to a fail-closed state.
 """
 from __future__ import annotations
 
+import re
+import sys
 from pathlib import Path
 
 from ai_escape_mrc.errors import OutputIdentityContractError, Phase9OutputContractError
@@ -25,8 +27,11 @@ PLAN_MIN_BYTES: int = 500
 #: Structural markers that must appear in a valid plan.md.
 PLAN_REQUIRED_MARKERS: tuple[str, ...] = ("## Task",)
 
+#: This skill's deprecated self-identity tokens. Unambiguous internals — no
+#: other skill uses them — so they are auto-sanitized (NOT raised on). The
+#: live-sibling-colliding `skill-8d-mrc` is intentionally ABSENT: it names a
+#: real workspace skill and is never auto-acted (warn only via the sanitizer).
 FORBIDDEN_LEGACY_IDENTITY_TERMS: tuple[str, ...] = (
-    "skill-8d-mrc",
     "run_8d",
     "trigger_8d",
     "eightd",
@@ -34,6 +39,48 @@ FORBIDDEN_LEGACY_IDENTITY_TERMS: tuple[str, ...] = (
     "pending-8d",
     "CLAUDE_EIGHTD",
 )
+
+#: Canonical rename map. Ordered: prefixed/longer tokens before bare ones so a
+#: partial rewrite can never happen (e.g. `eightd-` consumed before bare
+#: `eightd`). Targets contain none of the sources → sanitize is idempotent.
+LEGACY_IDENTITY_RENAME_MAP: tuple[tuple[str, str], ...] = (
+    ("run_8d", "run_ai_escape_mrc"),
+    ("trigger_8d", "trigger_ai_escape_mrc"),
+    ("8d-reports", "ai-escape-mrc-reports"),
+    ("pending-8d", "pending-ai-escape-mrc"),
+    ("CLAUDE_EIGHTD", "CLAUDE_AI_ESCAPE_MRC"),
+    ("eightd-", "aem-"),  # CLI prefix form, before bare 'eightd'
+    ("eightd", "aem"),    # bare
+)
+
+#: Ambiguous token: names a LIVE sibling skill. Never auto-rewritten; warn only.
+AMBIGUOUS_IDENTITY_TERM = "skill-8d-mrc"
+
+
+def sanitize_legacy_identity(text: str) -> str:
+    """Idempotently rewrite this skill's deprecated self-identity tokens to the
+    active identity, on word boundaries (no substring corruption).
+
+    The ambiguous ``skill-8d-mrc`` (a live sibling skill) is never rewritten —
+    only a non-blocking ``stderr`` warn is emitted if present. This is the
+    sanitize-then-proceed replacement for the former run-killing raise path:
+    callers always receive clean text and never an exception.
+    """
+    if not text:
+        return text
+    if AMBIGUOUS_IDENTITY_TERM in text:
+        sys.stderr.write(
+            f"[WARN] sanitize_legacy_identity: {AMBIGUOUS_IDENTITY_TERM!r} present; "
+            "left unchanged (live sibling skill; not auto-rewritten)\n"
+        )
+    out = text
+    for old, new in LEGACY_IDENTITY_RENAME_MAP:
+        if old.endswith("-"):
+            # Prefix token: boundary before, the literal hyphen is part of 'old'.
+            out = re.sub(r"\b" + re.escape(old), new, out)
+        else:
+            out = re.sub(r"\b" + re.escape(old) + r"\b", new, out)
+    return out
 
 
 def legacy_identity_instruction(*, include_legacy_terms: bool = False) -> str:
