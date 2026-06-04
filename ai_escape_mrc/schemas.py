@@ -166,8 +166,10 @@ PREVENTION_ACTION = {
                 "persistence_evidence": {"type": "string"},
                 "measurability": {"type": "string", "enum": ["PASS", "FAIL"]},
                 "measurability_evidence": {"type": "string"},
+                "proportionality": {"type": "string", "enum": ["PASS", "FAIL"]},
+                "proportionality_evidence": {"type": "string"},
             },
-            "required": ["scope", "persistence", "measurability"],
+            "required": ["scope", "persistence", "measurability", "proportionality"],
         },
         "hierarchy_level": {"type": "integer", "minimum": 1, "maximum": 5},
         "failure_mode_of_prevention": {"type": "string"},
@@ -189,7 +191,7 @@ PREVENTION_AUDIT = {
                     "quadrant": {"type": "string"},
                     "classification": {
                         "type": "string",
-                        "enum": ["ADDRESSABLE", "RESIDUAL"],
+                        "enum": ["ADDRESSABLE", "RESIDUAL", "OVER_SCOPED"],
                     },
                     "issue": {"type": "string"},
                     "suggested_fix": {"type": "string"},
@@ -200,10 +202,21 @@ PREVENTION_AUDIT = {
         },
         "verdict": {
             "type": "string",
-            "enum": ["CONTINUE", "EXHAUSTED", "REWORK"],
+            "enum": ["CONTINUE", "EXHAUSTED", "REWORK", "OVER_SCOPED"],
         },
     },
     "required": ["round", "weaknesses", "verdict"],
+}
+
+# Incident-class router classification (phase_1). Fail-safe default is True;
+# the router may return False ONLY for a local, non-recurring one-off.
+MRC_APPLICABILITY = {
+    "type": "object",
+    "properties": {
+        "mrc_applicable": {"type": "boolean"},
+        "justification": {"type": "string"},
+    },
+    "required": ["mrc_applicable", "justification"],
 }
 
 VERIFICATION_PLAN = {
