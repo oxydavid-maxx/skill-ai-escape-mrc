@@ -2,11 +2,11 @@
 
 Simulates a real-world contamination event: phase_4 prevention call for q3
 returns an `eightd-*` literal on the first attempt; the producer-side
-`_call_with_legacy_term_retry` wrapper detects it via
-`validate_action_payload`, retries with a critique, and the retry returns
-clean. Everything else (corrective q1, q2; prevention q4) is clean on first
-try. Final `state.prevention_actions` and `state.corrective_actions` must
-pass the consumer-side validator that phase_7/phase_9 would later run.
+`_call_with_legacy_term_retry` wrapper detects it (sanitize round-trip is a
+no-op iff clean), retries with a critique, and the retry returns clean.
+Everything else (corrective q1, q2; prevention q4) is clean on first try.
+Final `state.prevention_actions` and `state.corrective_actions` must be clean
+on the consumer-side path that phase_7/phase_9 would later run (sanitize no-op).
 
 Note on mock shape: phase_4 uses `parallel_run(max_workers=4)` which
 dispatches the 4 calls to a ThreadPoolExecutor — call ordering is
@@ -17,19 +17,27 @@ counter for q3 prevention attempts (only q3's first attempt returns the
 legacy literal). This preserves the intended scenario regardless of which
 order the executor happens to run the 4 tasks in.
 """
+import json
 import threading
 from unittest.mock import patch
 
 from ai_escape_mrc.phases.phase_4_actions import phase_4_actions
-from ai_escape_mrc.validators import validate_action_payload
+from ai_escape_mrc.validators import sanitize_legacy_identity
+
+
+def _assert_clean(payload):
+    """Consumer-side check: the final state is already free of legacy identity
+    tokens, so sanitizing it is a no-op (the producer gate kept it clean)."""
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert sanitize_legacy_identity(serialized) == serialized
 
 
 def test_phase_4_5_clean_after_legacy_retry_at_phase_4():
     """phase_4 prevention q3 first response has eightd-, retry clean.
 
-    Final corrective_actions + prevention_actions state must pass the
-    downstream (consumer-side) `validate_action_payload` check that
-    phase_7 / phase_9 would run on the artifact emission path.
+    Final corrective_actions + prevention_actions state must be clean for the
+    downstream (consumer-side) sanitize path that phase_7 / phase_9 run on the
+    artifact emission path (sanitize is a no-op on clean state).
     """
     # Thread-safe counter for prevention calls; only the FIRST prevention
     # call gets the contaminated response (simulating q3's first attempt).
@@ -87,16 +95,11 @@ def test_phase_4_5_clean_after_legacy_retry_at_phase_4():
         f"got {prevention_call_count['n']}"
     )
 
-    # Final state must pass the consumer-side validator that phase_7/phase_9
-    # would later run.  This is the integration assertion: producer gate
-    # keeps downstream inputs clean without consumer-side sanitization being
-    # needed for new runs.
-    validate_action_payload(
-        state["corrective_actions"], artifact_name="integration test corrective"
-    )
-    validate_action_payload(
-        state["prevention_actions"], artifact_name="integration test prevention"
-    )
+    # Final state is clean for the consumer-side path that phase_7/phase_9 run.
+    # This is the integration assertion: the producer gate (retry-then-sanitize)
+    # keeps downstream inputs clean, so sanitizing the final state is a no-op.
+    _assert_clean(state["corrective_actions"])
+    _assert_clean(state["prevention_actions"])
 
     # Sanity: both quadrants populated for each action class.
     assert set(state["corrective_actions"].keys()) == {"q1_trc_nc", "q2_trc_nd"}

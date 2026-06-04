@@ -1,47 +1,58 @@
-"""Unit tests for ai_escape_mrc.validators payload helpers."""
+"""Unit tests for ai_escape_mrc.validators identity sanitizer.
+
+Replaces the deleted raise-based payload validator (validate_action_payload):
+the identity path now sanitizes payloads (via JSON round-trip at the phase
+sites) and never raises.
+"""
+import json
 import pytest
-from ai_escape_mrc.errors import OutputIdentityContractError
+
 from ai_escape_mrc.validators import (
     FORBIDDEN_LEGACY_IDENTITY_TERMS,
-    validate_action_payload,
+    sanitize_legacy_identity,
 )
 
 
-def test_validate_action_payload_passes_clean_dict():
+def _sanitize_payload(payload):
+    """Mirror the phase-site contract: JSON round-trip a dict/list payload
+    through the sanitizer. Strings are sanitized directly."""
+    if isinstance(payload, (dict, list)):
+        return json.loads(sanitize_legacy_identity(json.dumps(payload, ensure_ascii=False)))
+    return sanitize_legacy_identity(str(payload))
+
+
+def test_sanitize_passes_clean_dict_unchanged():
     payload = {"quadrant": "q1_trc_nc", "action": "use ai-escape-mrc skill", "rationale": "ok"}
-    validate_action_payload(payload, artifact_name="phase_4 corrective q1_trc_nc")
+    assert _sanitize_payload(payload) == payload
 
 
-def test_validate_action_payload_passes_clean_string():
-    validate_action_payload("plain corrective text", artifact_name="phase_4 corrective q1")
+def test_sanitize_passes_clean_string_unchanged():
+    assert _sanitize_payload("plain corrective text") == "plain corrective text"
 
 
-def test_validate_action_payload_passes_clean_list():
-    validate_action_payload(
-        [{"step": "use aem-omission-resolve"}],
-        artifact_name="phase_4 corrective q1",
-    )
+def test_sanitize_passes_clean_list_unchanged():
+    payload = [{"step": "use aem-omission-resolve"}]
+    assert _sanitize_payload(payload) == payload
 
 
 @pytest.mark.parametrize("term", FORBIDDEN_LEGACY_IDENTITY_TERMS)
-def test_validate_action_payload_raises_on_each_forbidden_term(term):
+def test_sanitize_rewrites_each_forbidden_term(term):
     payload = {"action": f"create {term} binary"}
-    with pytest.raises(OutputIdentityContractError) as exc:
-        validate_action_payload(payload, artifact_name="test")
-    assert term in str(exc.value)
+    cleaned = _sanitize_payload(payload)
+    # The forbidden token is gone after sanitize (substituted by the rename map).
+    assert term not in json.dumps(cleaned, ensure_ascii=False)
 
 
-def test_validate_action_payload_raises_with_nested_dict():
+def test_sanitize_rewrites_nested_dict():
     payload = {
         "quadrant": "q3_mrc_nc",
         "action": "set up resolver",
         "steps": [{"cmd": "./eightd-omission-resolve --foo"}],
     }
-    with pytest.raises(OutputIdentityContractError):
-        validate_action_payload(payload, artifact_name="phase_4 prevention q3")
+    cleaned = _sanitize_payload(payload)
+    assert cleaned["steps"][0]["cmd"] == "./aem-omission-resolve --foo"
 
 
-def test_validate_action_payload_artifact_name_in_error():
-    with pytest.raises(OutputIdentityContractError) as exc:
-        validate_action_payload({"x": "skill-8d-mrc"}, artifact_name="some_specific_label_42")
-    assert "some_specific_label_42" in str(exc.value)
+def test_sanitize_leaves_skill_8d_mrc_unchanged():
+    payload = {"x": "skill-8d-mrc"}
+    assert _sanitize_payload(payload) == payload

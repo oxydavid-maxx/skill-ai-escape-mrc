@@ -6,11 +6,14 @@
 # WIKI-ACTION: validate_phase9_plan() asserts size + structural markers before
 #   the FSM is allowed to transition; raises typed exception on failure so the
 #   caller can emit a fail-closed gate artifact (R13 compliant; no degraded warning).
-"""Output-contract validators for AI Escape MRC pipeline phases.
+"""Output-contract validators + identity sanitizer for AI Escape MRC phases.
 
-Each validator raises a typed exception (from ai_escape_mrc.errors) on failure.
-No degraded-success warnings are emitted (R13 compliance); callers receive
-a typed exception and must route to a fail-closed state.
+Structural validators (``validate_phase9_plan``: size + markers) raise a typed
+exception (from ai_escape_mrc.errors) on failure — a too-short / malformed plan
+is a real defect, fail-closed (R13). The identity path is DIFFERENT: deprecated
+self-identity tokens are a cosmetic naming issue, so ``sanitize_legacy_identity``
+rewrites them in place and never raises — a finished run can no longer be
+destroyed at the last phase by a naming check.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ import re
 import sys
 from pathlib import Path
 
-from ai_escape_mrc.errors import OutputIdentityContractError, Phase9OutputContractError
+from ai_escape_mrc.errors import Phase9OutputContractError
 
 
 #: Minimum acceptable plan.md size in bytes.
@@ -89,7 +92,7 @@ def legacy_identity_instruction(*, include_legacy_terms: bool = False) -> str:
     Generated artifacts must not include deprecated token literals anywhere,
     even inside a "check this denylist" command. The default generation prompt
     therefore avoids enumerating the forbidden terms; the deterministic
-    validator below owns the exact denylist.
+    ``sanitize_legacy_identity`` rewriter owns the exact rename map.
     """
     text = (
         "Active skill identity: AI Escape MRC. Use `skills/skill-ai-escape-mrc`, "
@@ -103,34 +106,6 @@ def legacy_identity_instruction(*, include_legacy_terms: bool = False) -> str:
         terms = ", ".join(f"`{term}`" for term in FORBIDDEN_LEGACY_IDENTITY_TERMS)
         text += f" Runtime validator denylist: {terms}."
     return text
-
-
-def validate_no_legacy_identity_terms(text: str, *, artifact_name: str) -> None:
-    """Fail generated artifacts that regress to the old skill identity."""
-    for term in FORBIDDEN_LEGACY_IDENTITY_TERMS:
-        if term in text:
-            raise OutputIdentityContractError(
-                f"{artifact_name} contains legacy identity term: {term!r}",
-                predicate=f"legacy_identity:{term}",
-            )
-
-
-def validate_action_payload(payload, *, artifact_name: str) -> None:
-    """Validate any phase output payload (dict/list/str) for legacy identity terms.
-
-    JSON-serializes dict/list inputs so nested keys, list entries, embedded
-    command strings, and rationales are all surfaced to the underlying
-    `validate_no_legacy_identity_terms` denylist check. Strings pass through.
-    Used by phase_4 / phase_5 LLM-call wrappers as a producer-side gate;
-    raising here forces a one-shot retry with a named critique, and a second
-    failure propagates as `OutputIdentityContractError` (fail-closed).
-    """
-    import json
-    if isinstance(payload, (dict, list)):
-        text = json.dumps(payload, ensure_ascii=False)
-    else:
-        text = str(payload)
-    validate_no_legacy_identity_terms(text, artifact_name=artifact_name)
 
 
 def validate_phase9_plan(
@@ -173,8 +148,10 @@ def validate_phase9_plan(
         )
 
     # Predicate 3: structural markers
+    # (Identity is NOT a predicate here: Phase 9 sanitizes the plan text via
+    # sanitize_legacy_identity before writing, so a cosmetic naming token can
+    # never destroy a finished run at this gate.)
     content = plan_path.read_text(encoding="utf-8")
-    validate_no_legacy_identity_terms(content, artifact_name=str(plan_path))
     for marker in required_markers:
         if marker not in content:
             raise Phase9OutputContractError(
