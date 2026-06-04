@@ -41,7 +41,11 @@ from pathlib import Path
 #   raises Phase9OutputContractError on failure for fail-closed routing (R13).
 from ai_escape_mrc.sdk_client import call_claude
 from ai_escape_mrc.models import model_for_role
-from ai_escape_mrc.validators import legacy_identity_instruction, validate_phase9_plan
+from ai_escape_mrc.validators import (
+    legacy_identity_instruction,
+    sanitize_legacy_identity,
+    validate_phase9_plan,
+)
 
 
 SYSTEM_PROMPT = """You are an implementation-plan author. Convert the structured \
@@ -107,7 +111,10 @@ def phase_9_write_plan(state: dict) -> dict:
 
     # WIKI-CONSULTED: silent-staleness#output-validation
     # WIKI-FINDING: write + validate in same step; never transition FSM on unvalidated output.
-    # WIKI-ACTION: validate_phase9_plan raises Phase9OutputContractError before return.
+    # WIKI-ACTION: validate_phase9_plan raises Phase9OutputContractError on size/marker
+    #   failure before return. Identity is sanitized (not raised) here: a cosmetic
+    #   naming token can no longer destroy a finished run at the last phase.
+    plan_md = sanitize_legacy_identity(plan_md)
     plan_path.write_text(plan_md, encoding="utf-8")
     validate_phase9_plan(plan_path)
     return {"plan_path": str(plan_path), "phase_9_complete": True}
